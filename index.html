@@ -53,12 +53,16 @@
 <button class="btn-refresh" onclick="load()">↺ Aktualisieren</button>
 <div class="toast" id="toast"></div>
 
-<script type="module">
+<!-- msgpack -->
+<script src="https://cdn.jsdelivr.net/npm/@msgpack/msgpack@3.0.0/dist.es5+umd/msgpack.min.js"></script>
+<!-- ethers -->
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+
+<script>
 const WALLET = '0x6236addd817f8f364b9ea2d390341fbdfb35b15b';
 const PRIV   = '0x4a1ba82e2124b34d79ce7f2bc48a156b4dba78150f579bd12482f1d733f12ba9';
 
 let currentPositions = [];
-let exchangeClient = null;
 
 function fmt(n) { return parseFloat(n||0).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 
@@ -67,15 +71,42 @@ async function q(body) {
   return r.json();
 }
 
-async function initSDK() {
-  if (exchangeClient) return;
-  try {
-    const { ExchangeClient, HttpTransport } = await import('https://esm.sh/@nktkas/hyperliquid@0.20.0');
-    const transport = new HttpTransport();
-    exchangeClient = new ExchangeClient({ transport, wallet: PRIV });
-  } catch(e) {
-    console.error('SDK init failed:', e);
-  }
+// Hyperliquid L1 Action Signing — exakt wie Python SDK sign_l1_action
+function msgpackEncode(action, nonce, isMainnet) {
+  // Reihenfolge der Felder wichtig für msgpack!
+  // connectionId = keccak256(msgpack(action) + nonce_bytes + vaultAddress_byte)
+  const actionBytes = msgpack.encode(action);
+  const nonceBuf = new ArrayBuffer(8);
+  new DataView(nonceBuf).setBigUint64(0, BigInt(nonce), false);
+  const nonceBytes = new Uint8Array(nonceBuf);
+  // vaultAddress = null → 0x00
+  const vaultByte = new Uint8Array([0x00]);
+  const combined = new Uint8Array(actionBytes.length + 8 + 1);
+  combined.set(actionBytes, 0);
+  combined.set(nonceBytes, actionBytes.length);
+  combined.set(vaultByte, actionBytes.length + 8);
+  return combined;
+}
+
+async function signL1Action(action, nonce) {
+  const wallet = new ethers.Wallet(PRIV);
+  const combined = msgpackEncode(action, nonce);
+  const connectionId = ethers.keccak256(combined);
+
+  const domain = {
+    chainId: 1337,
+    name: 'Exchange',
+    verifyingContract: '0x0000000000000000000000000000000000000000',
+    version: '1'
+  };
+  const types = {
+    Agent: [
+      { name: 'source', type: 'string' },
+      { name: 'connectionId', type: 'bytes32' }
+    ]
+  };
+  const value = { source: 'a', connectionId };
+  return wallet.signTypedData(domain, types, value);
 }
 
 window.closeAll = async function() {
@@ -83,10 +114,6 @@ window.closeAll = async function() {
   btn.disabled = true;
   btn.textContent = 'Wird geschlossen…';
   try {
-    await initSDK();
-    if (!exchangeClient) throw new Error('SDK nicht geladen');
-
-    // Für jeden Position eine Market-Close Order
     const meta = await q({type:'meta', dex:'xyz'});
     const universe = meta?.universe || [];
 
@@ -99,36 +126,48 @@ window.closeAll = async function() {
       const isBuy = szi < 0;
       const sz = Math.abs(szi);
 
-      // Aktuellen Preis holen für slippage
+      // Aktuellen Preis + 3% Slippage für sicheres Fill
       const mids = await q({type:'allMids'});
-      const midPrice = parseFloat(mids?.['xyz:'+coinName] || 0);
-      // 2% slippage
+      const mid = parseFloat(mids?.['xyz:'+coinName] || 0);
       const limitPx = isBuy
-        ? (midPrice * 1.02).toFixed(4)
-        : (midPrice * 0.98).toFixed(4);
+        ? String((mid * 1.03).toFixed(4))
+        : String((mid * 0.97).toFixed(4));
 
-      const result = await exchangeClient.order({
-        orders: [{
-          a: assetIdx,
-          b: isBuy,
-          p: limitPx,
-          s: sz.toFixed(4),
-          r: true,
-          t: { limit: { tif: 'Ioc' } }
-        }],
-        grouping: 'na',
-        dex: 'xyz'
+      const nonce = Date.now();
+
+      // Exakte Reihenfolge wie Python SDK OrderRequest
+      const order = { a: assetIdx, b: isBuy, p: limitPx, s: String(sz), r: true, t: { limit: { tif: 'Ioc' } } };
+      const action = { type: 'order', orders: [order], grouping: 'na', dex: 'xyz' };
+
+      const sig = await signL1Action(action, nonce);
+      const sigObj = ethers.Signature.from(sig);
+
+      const payload = {
+        action,
+        nonce,
+        signature: { r: sigObj.r, s: sigObj.s, v: sigObj.v }
+      };
+
+      const res = await fetch('https://api.hyperliquid.xyz/exchange', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
       });
-      console.log('order result:', JSON.stringify(result));
-      const status = result?.response?.data?.statuses?.[0];
-      if (status?.filled) toast('✓ Geschlossen: ' + coinName);
+      const text = await res.text();
+      console.log('response:', text);
+      let data;
+      try { data = JSON.parse(text); } catch { toast('Server: ' + text.slice(0,80)); continue; }
+
+      const status = data?.response?.data?.statuses?.[0];
+      if (status?.filled) toast('✓ ' + coinName + ' geschlossen');
+      else if (status?.resting) toast('✓ Order platziert');
       else if (status?.error) toast('Fehler: ' + status.error);
-      else toast('Antwort: ' + JSON.stringify(result).slice(0,60));
+      else toast(JSON.stringify(data).slice(0,80));
     }
     setTimeout(load, 2000);
   } catch(e) {
-    toast('Fehler: ' + e.message);
     console.error(e);
+    toast('Fehler: ' + e.message);
     btn.disabled = false;
     btn.textContent = 'Alle Positionen schließen (Market)';
   }
@@ -170,7 +209,7 @@ window.load = async function() {
   }
 }
 
-window.toast = function(msg) {
+function toast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'), 5000);
@@ -189,8 +228,6 @@ const url = c.toDataURL();
   l.href=url;
 });
 
-// SDK vorladen
-initSDK();
 load();
 setInterval(load, 30000);
 </script>
