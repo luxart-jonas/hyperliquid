@@ -54,6 +54,25 @@ let positions = [];
 function fmt(n){return parseFloat(n||0).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});}
 async function q(b){const r=await fetch('https://api.hyperliquid.xyz/info',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});return r.json();}
 
+// Größe floor-truncaten auf szDecimals (keine trailing zeroes)
+function formatSz(sz, szDecimals) {
+  const factor = Math.pow(10, szDecimals);
+  const truncated = Math.floor(Math.abs(sz) * factor) / factor;
+  // trailing zeroes entfernen
+  return truncated.toFixed(szDecimals).replace(/\.?0+$/, '') || '0';
+}
+
+// Preis: max 5 signifikante Stellen, max (6-szDecimals) Dezimalstellen
+function formatPx(px, szDecimals) {
+  const maxDecimals = 6 - szDecimals;
+  // Auf 5 signifikante Stellen
+  const sigFigs = parseFloat(px.toPrecision(5));
+  // Auf maxDecimals Dezimalstellen
+  const factor = Math.pow(10, maxDecimals);
+  const rounded = Math.round(sigFigs * factor) / factor;
+  return String(rounded);
+}
+
 function mpPack(obj){
   const buf=[];
   function w(v){
@@ -101,9 +120,9 @@ async function signL1Action(action, nonce){
   combined[packed.length + 8] = 0x00;
   const hash = ethers.keccak256(combined);
   const sig = await wallet.signTypedData(
-    {chainId:1337, name:'Exchange', verifyingContract:'0x0000000000000000000000000000000000000000', version:'1'},
+    {chainId:1337,name:'Exchange',verifyingContract:'0x0000000000000000000000000000000000000000',version:'1'},
     {Agent:[{name:'source',type:'string'},{name:'connectionId',type:'bytes32'}]},
-    {source:'a', connectionId:hash}
+    {source:'a',connectionId:hash}
   );
   return ethers.Signature.from(sig);
 }
@@ -112,7 +131,6 @@ window.closeAll = async function(){
   const btn = document.getElementById('close-btn');
   btn.disabled = true; btn.textContent = 'Schliessen...';
   try {
-    // Meta holen um szDecimals zu kennen
     const meta = await q({type:'metaAndAssetCtxs', dex:'xyz'});
     const universe = meta?.[0]?.universe || [];
 
@@ -122,24 +140,19 @@ window.closeAll = async function(){
       const idx = XYZ.indexOf(name);
       if(idx < 0){ toast('Unbekannt: '+name); btn.disabled=false; btn.textContent='Schliessen (Market)'; return; }
 
-      // szDecimals aus meta
       const assetMeta = universe[idx];
       const szDecimals = assetMeta?.szDecimals ?? 3;
-      console.log('szDecimals for '+name+':', szDecimals);
 
-      const szi = pos.position.szi; // String direkt verwenden!
-      const sziFloat = parseFloat(szi);
+      const sziFloat = parseFloat(pos.position.szi);
       const isBuy = sziFloat < 0;
-      // Größe exakt wie in Position, auf szDecimals gerundet
-      const sz = Math.abs(sziFloat).toFixed(szDecimals);
+      const sz = formatSz(Math.abs(sziFloat), szDecimals);
 
       const mids = await q({type:'allMids', dex:'xyz'});
       const mid = parseFloat(mids?.[fullCoin] || mids?.[name] || 0);
       if(!mid){ toast('Kein Preis: '+name); btn.disabled=false; btn.textContent='Schliessen (Market)'; return; }
 
-      // Preis-Decimals aus meta
-      const pxDecimals = 4;
-      const px = isBuy ? (mid*1.03).toFixed(pxDecimals) : (mid*0.97).toFixed(pxDecimals);
+      const rawPx = isBuy ? mid * 1.03 : mid * 0.97;
+      const px = formatPx(rawPx, szDecimals);
 
       const nonce = Date.now();
       const action = {
@@ -147,7 +160,7 @@ window.closeAll = async function(){
         orders: [{a: idx, b: isBuy, p: px, s: sz, r: true, t: {limit: {tif: 'Ioc'}}}],
         grouping: 'na'
       };
-      console.log('action:', JSON.stringify(action));
+      console.log('sz:', sz, 'px:', px, 'action:', JSON.stringify(action));
       const sig = await signL1Action(action, nonce);
       const payload = {action, nonce, signature:{r:sig.r, s:sig.s, v:sig.v}, vaultAddress:null};
 
