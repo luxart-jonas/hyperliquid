@@ -33,27 +33,44 @@
     width:100%; max-width:360px; margin-top:1.2rem;
     padding:16px; border-radius:14px; border:1px solid #2a1a1a;
     background:#1a1a1a; color:#f87171;
-    font-size:16px; font-weight:600; cursor:pointer; letter-spacing:0.04em;
+    font-size:16px; font-weight:600; cursor:pointer;
   }
   .btn-close:active { background:#2a1a1a; }
   .btn-close:disabled { opacity:0.4; cursor:not-allowed; }
   .btn-refresh { background:none; border:1px solid #252525; color:#666; font-size:13px; letter-spacing:0.12em; text-transform:uppercase; padding:12px 28px; border-radius:99px; cursor:pointer; margin-top:1.5rem; }
   .btn-refresh:active { border-color:#555; color:#bbb; }
-  #setup, #unlock {
-    position:fixed; inset:0; background:#0a0a0a;
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    padding:2rem; gap:1rem; z-index:100;
+
+  /* Passwort-Modal */
+  #pw-modal {
+    position:fixed; inset:0; background:rgba(0,0,0,0.85);
+    display:none; align-items:center; justify-content:center;
+    z-index:100; padding:2rem;
   }
-  #setup h2, #unlock h2 { font-size:20px; font-weight:600; margin-bottom:0.5rem; }
-  #setup p { font-size:14px; color:#666; text-align:center; line-height:1.6; max-width:300px; }
-  .inp {
-    width:100%; max-width:320px; background:#141414; border:1px solid #333;
-    color:#fff; font-size:16px; padding:14px 16px; border-radius:12px; outline:none;
+  #pw-modal.show { display:flex; }
+  .modal-box {
+    background:#141414; border:1px solid #2a2a2a; border-radius:20px;
+    padding:2rem; width:100%; max-width:320px;
+    display:flex; flex-direction:column; gap:1rem; align-items:center;
   }
-  .inp::placeholder { color:#444; }
-  .btn-green { background:#4ade80; color:#000; font-size:16px; font-weight:700; padding:16px; border-radius:14px; border:none; width:100%; max-width:320px; cursor:pointer; margin-top:0.5rem; }
+  .modal-box h2 { font-size:18px; font-weight:600; }
+  .modal-box p { font-size:14px; color:#666; text-align:center; }
+  .inp { width:100%; background:#0a0a0a; border:1px solid #333; color:#fff; font-size:18px; padding:14px 16px; border-radius:12px; outline:none; text-align:center; }
+  .inp::placeholder { color:#333; }
+  .btn-green { background:#4ade80; color:#000; font-size:16px; font-weight:700; padding:14px; border-radius:12px; border:none; width:100%; cursor:pointer; }
   .btn-green:active { background:#22c55e; }
-  .toast { position:fixed; bottom:2rem; left:50%; transform:translateX(-50%); background:#1a1a1a; border:1px solid #333; color:#fff; padding:12px 24px; border-radius:12px; font-size:14px; opacity:0; transition:opacity 0.3s; pointer-events:none; white-space:nowrap; }
+  .btn-cancel { background:none; border:none; color:#555; font-size:14px; cursor:pointer; padding:4px; }
+
+  /* Setup */
+  #setup {
+    position:fixed; inset:0; background:#0a0a0a;
+    display:none; flex-direction:column; align-items:center; justify-content:center;
+    padding:2rem; gap:1rem; z-index:200;
+  }
+  #setup.show { display:flex; }
+  #setup h2 { font-size:20px; font-weight:600; }
+  #setup p { font-size:14px; color:#666; text-align:center; line-height:1.6; max-width:300px; }
+
+  .toast { position:fixed; bottom:2rem; left:50%; transform:translateX(-50%); background:#1a1a1a; border:1px solid #333; color:#fff; padding:12px 24px; border-radius:12px; font-size:14px; opacity:0; transition:opacity 0.3s; pointer-events:none; white-space:nowrap; z-index:999; }
   .toast.show { opacity:1; }
   .loading { color:#222; animation:pulse 1.2s ease-in-out infinite; }
   @keyframes pulse { 0%,100%{opacity:.3} 50%{opacity:1} }
@@ -61,101 +78,100 @@
 </head>
 <body>
 
-<div id="setup" style="display:none;">
+<!-- Setup (nur erster Start) -->
+<div id="setup">
   <h2>HL Balance — Setup</h2>
-  <p>Wähle ein Passwort. Dein API-Key wird verschlüsselt gespeichert.</p>
+  <p>Wähle ein Passwort für den Close-Button. Nur einmal nötig.</p>
   <input class="inp" type="password" id="setup-pw" placeholder="Passwort wählen" autocomplete="new-password">
-  <input class="inp" type="password" id="setup-pw2" placeholder="Passwort wiederholen" autocomplete="new-password">
-  <button class="btn-green" onclick="doSetup()">Speichern & starten</button>
+  <input class="inp" type="password" id="setup-pw2" placeholder="Wiederholen" autocomplete="new-password">
+  <button class="btn-green" onclick="doSetup()">Fertig</button>
 </div>
 
-<div id="unlock" style="display:none;">
-  <h2>🔒 HL Balance</h2>
-  <input class="inp" type="password" id="unlock-pw" placeholder="Passwort" autocomplete="current-password">
-  <button class="btn-green" onclick="doUnlock()">Entsperren</button>
-</div>
-
-<div id="main" style="display:none; flex-direction:column; align-items:center; width:100%;">
-  <div class="label">Kontostand</div>
-  <div id="total" class="total loading">…</div>
-  <div class="cards">
-    <div class="card">
-      <div class="card-label">Unrealized PnL</div>
-      <div id="pnl" class="card-value neu">—</div>
-      <div id="coin" class="coin-tag"></div>
-    </div>
-    <div class="card">
-      <div class="card-label">Reserviert</div>
-      <div id="hold" class="card-value">—</div>
-    </div>
+<!-- Passwort-Modal (nur beim Schließen) -->
+<div id="pw-modal">
+  <div class="modal-box">
+    <h2>🔒 Position schließen</h2>
+    <p>Passwort eingeben um die Position zu schließen</p>
+    <input class="inp" type="password" id="modal-pw" placeholder="••••••" autocomplete="current-password">
+    <button class="btn-green" onclick="confirmClose()">Schließen bestätigen</button>
+    <button class="btn-cancel" onclick="cancelClose()">Abbrechen</button>
   </div>
-  <button id="close-btn" class="btn-close" style="display:none;" onclick="closePosition()">Position schließen (Market)</button>
-  <div class="divider"></div>
-  <div id="updated" class="meta">wird geladen…</div>
-  <button class="btn-refresh" onclick="load()">↺ Aktualisieren</button>
 </div>
+
+<!-- Hauptansicht -->
+<div class="label">Kontostand</div>
+<div id="total" class="total loading">…</div>
+
+<div class="cards">
+  <div class="card">
+    <div class="card-label">Unrealized PnL</div>
+    <div id="pnl" class="card-value neu">—</div>
+    <div id="coin" class="coin-tag"></div>
+  </div>
+  <div class="card">
+    <div class="card-label">Reserviert</div>
+    <div id="hold" class="card-value">—</div>
+  </div>
+</div>
+
+<button id="close-btn" class="btn-close" style="display:none;" onclick="askClose()">
+  Position schließen (Market)
+</button>
+
+<div class="divider"></div>
+<div id="updated" class="meta">wird geladen…</div>
+<button class="btn-refresh" onclick="load()">↺ Aktualisieren</button>
 
 <div class="toast" id="toast"></div>
 
 <script>
 const WALLET  = '0x6236aDdD817F8f364b9Ea2D390341fBdFb35B15B';
-const AGENT   = '0x78848254D412f6907E7fa6707D5Ef8c2638d6687';
 const RAW_KEY = '0x4a1ba82e2124b34d79ce7f2bc48a156b4dba78150f579bd12482f1d733f12ba9';
 
-let apiPrivKey = null;
 let currentPositions = [];
 
+// ── Crypto ───────────────────────────────────────────────────────
 async function deriveKey(pw, salt) {
   const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveKey']);
   return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:100000,hash:'SHA-256'}, km, {name:'AES-GCM',length:256}, false, ['encrypt','decrypt']);
 }
 async function encrypt(text, pw) {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const iv   = crypto.getRandomValues(new Uint8Array(12));
-  const key  = await deriveKey(pw, salt);
-  const ct   = await crypto.subtle.encrypt({name:'AES-GCM',iv}, key, new TextEncoder().encode(text));
-  const buf  = new Uint8Array(16 + 12 + ct.byteLength);
+  const salt=crypto.getRandomValues(new Uint8Array(16)), iv=crypto.getRandomValues(new Uint8Array(12));
+  const key=await deriveKey(pw,salt);
+  const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(text));
+  const buf=new Uint8Array(16+12+ct.byteLength);
   buf.set(salt,0); buf.set(iv,16); buf.set(new Uint8Array(ct),28);
   return btoa(String.fromCharCode(...buf));
 }
 async function decrypt(b64, pw) {
-  const buf = Uint8Array.from(atob(b64), c=>c.charCodeAt(0));
-  const key = await deriveKey(pw, buf.slice(0,16));
-  const pt  = await crypto.subtle.decrypt({name:'AES-GCM',iv:buf.slice(16,28)}, key, buf.slice(28));
+  const buf=Uint8Array.from(atob(b64),c=>c.charCodeAt(0));
+  const key=await deriveKey(pw,buf.slice(0,16));
+  const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:buf.slice(16,28)},key,buf.slice(28));
   return new TextDecoder().decode(pt);
 }
 
+// ── Setup ────────────────────────────────────────────────────────
 async function doSetup() {
-  const pw  = document.getElementById('setup-pw').value;
-  const pw2 = document.getElementById('setup-pw2').value;
-  if (pw.length < 4)   return toast('Passwort zu kurz (min. 4 Zeichen)');
-  if (pw !== pw2)      return toast('Passwörter stimmen nicht überein');
-  const enc = await encrypt(RAW_KEY, pw);
-  localStorage.setItem('hl_key', enc);
-  apiPrivKey = RAW_KEY;
-  document.getElementById('setup').style.display = 'none';
-  showMain();
+  const pw=document.getElementById('setup-pw').value;
+  const pw2=document.getElementById('setup-pw2').value;
+  if (pw.length<4) return toast('Passwort zu kurz');
+  if (pw!==pw2) return toast('Passwörter stimmen nicht überein');
+  localStorage.setItem('hl_key', await encrypt(RAW_KEY, pw));
+  document.getElementById('setup').classList.remove('show');
+  toast('Setup abgeschlossen ✓');
 }
+document.getElementById('setup-pw2').addEventListener('keydown', e=>{ if(e.key==='Enter') doSetup(); });
 
-async function doUnlock() {
-  const pw  = document.getElementById('unlock-pw').value;
-  const enc = localStorage.getItem('hl_key');
-  try {
-    apiPrivKey = await decrypt(enc, pw);
-    document.getElementById('unlock').style.display = 'none';
-    showMain();
-  } catch { toast('Falsches Passwort'); }
+// ── Init ─────────────────────────────────────────────────────────
+if (!localStorage.getItem('hl_key')) {
+  document.getElementById('setup').classList.add('show');
 }
-document.addEventListener('keydown', e => { if(e.key==='Enter') { if(document.getElementById('unlock').style.display!=='none') doUnlock(); if(document.getElementById('setup').style.display!=='none') doSetup(); }});
+load();
 
-function showMain() {
-  document.getElementById('main').style.display = 'flex';
-  load();
-}
-
+// ── Data ─────────────────────────────────────────────────────────
 function fmt(n) { return parseFloat(n||0).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 async function q(body) {
-  const r = await fetch('https://api.hyperliquid.xyz/info',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const r=await fetch('https://api.hyperliquid.xyz/info',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   return r.json();
 }
 
@@ -163,26 +179,24 @@ async function load() {
   document.getElementById('total').className='total loading';
   document.getElementById('total').textContent='…';
   try {
-    const [spotData, xyzData] = await Promise.all([
+    const [spotData,xyzData]=await Promise.all([
       q({type:'spotClearinghouseState',user:WALLET}),
       q({type:'clearinghouseState',user:WALLET,dex:'xyz'})
     ]);
-    const usdc = (spotData.balances||[]).find(b=>b.coin==='USDC')||{};
-    const spotTotal = parseFloat(usdc.total||0);
-    const holdVal   = parseFloat(usdc.hold||0);
-    currentPositions = xyzData.assetPositions||[];
-    let pnl=0, coins=[];
+    const usdc=(spotData.balances||[]).find(b=>b.coin==='USDC')||{};
+    currentPositions=xyzData.assetPositions||[];
+    let pnl=0,coins=[];
     for (const p of currentPositions) {
-      pnl += parseFloat(p?.position?.unrealizedPnl||0);
-      if (p?.position?.coin) coins.push(p.position.coin.replace('xyz:',''));
+      pnl+=parseFloat(p?.position?.unrealizedPnl||0);
+      if(p?.position?.coin) coins.push(p.position.coin.replace('xyz:',''));
     }
     document.getElementById('total').className='total';
-    document.getElementById('total').innerHTML=fmt(spotTotal)+'<span class="currency">$</span>';
+    document.getElementById('total').innerHTML=fmt(usdc.total)+'<span class="currency">$</span>';
     const pnlEl=document.getElementById('pnl');
     pnlEl.textContent=pnl===0?'—':(pnl>=0?'+':'')+fmt(pnl)+' $';
     pnlEl.className='card-value '+(pnl>0?'pos':pnl<0?'neg':'neu');
     document.getElementById('coin').textContent=coins.join(', ');
-    document.getElementById('hold').textContent=fmt(holdVal)+' $';
+    document.getElementById('hold').textContent=fmt(usdc.hold)+' $';
     document.getElementById('updated').textContent='Stand: '+new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
     const btn=document.getElementById('close-btn');
     if (currentPositions.length>0) {
@@ -191,57 +205,60 @@ async function load() {
       btn.disabled=false;
     } else { btn.style.display='none'; }
   } catch(e) {
-    document.getElementById('total').className='total';
-    document.getElementById('total').style.fontSize='16px';
     document.getElementById('total').style.color='#f87171';
+    document.getElementById('total').style.fontSize='16px';
     document.getElementById('total').textContent='Fehler: '+e.message;
   }
 }
 
-async function closePosition() {
-  if (!apiPrivKey || currentPositions.length===0) return;
+// ── Close flow ───────────────────────────────────────────────────
+function askClose() {
+  document.getElementById('modal-pw').value='';
+  document.getElementById('pw-modal').classList.add('show');
+  setTimeout(()=>document.getElementById('modal-pw').focus(),100);
+}
+function cancelClose() {
+  document.getElementById('pw-modal').classList.remove('show');
+}
+document.getElementById('modal-pw').addEventListener('keydown',e=>{ if(e.key==='Enter') confirmClose(); });
+
+async function confirmClose() {
+  const pw=document.getElementById('modal-pw').value;
+  const enc=localStorage.getItem('hl_key');
+  let privKey;
+  try { privKey=await decrypt(enc,pw); }
+  catch { return toast('Falsches Passwort'); }
+  document.getElementById('pw-modal').classList.remove('show');
+  await executeClose(privKey);
+}
+
+async function executeClose(privKey) {
   const btn=document.getElementById('close-btn');
   btn.disabled=true; btn.textContent='Wird geschlossen…';
   try {
-    const {ethers} = await import('https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.min.js');
-    const wallet = new ethers.Wallet(apiPrivKey);
-
-    // Meta für xyz DEX holen
-    const meta = await q({type:'meta',dex:'xyz'});
-    const universe = meta?.universe||[];
-
+    const {ethers}=await import('https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.min.js');
+    const wallet=new ethers.Wallet(privKey);
+    const meta=await q({type:'meta',dex:'xyz'});
+    const universe=meta?.universe||[];
     for (const pos of currentPositions) {
-      const coinName = pos.position.coin.replace('xyz:','');
-      const assetIdx = universe.findIndex(u=>u.name===coinName);
+      const coinName=pos.position.coin.replace('xyz:','');
+      const assetIdx=universe.findIndex(u=>u.name===coinName);
       if (assetIdx<0) { toast('Asset nicht gefunden: '+coinName); continue; }
-      const szi  = parseFloat(pos.position.szi);
-      const isBuy = szi < 0;
-      const sz   = Math.abs(szi).toString();
-      const nonce = Date.now();
-
-      const action = {
-        type:'order',
-        orders:[{ a:assetIdx, b:isBuy, p:'0', s:sz, r:true, t:{limit:{tif:'Ioc'}} }],
-        grouping:'na',
-        dex:'xyz'
-      };
-
-      const actionHash = ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify(action)+nonce));
-      const phantomAgent = { source:'a', connectionId:actionHash };
-      const domain = { chainId:1337, name:'Exchange', verifyingContract:'0x0000000000000000000000000000000000000000', version:'1' };
-      const types  = { Agent:[{name:'source',type:'string'},{name:'connectionId',type:'bytes32'}] };
-      const sig = await wallet.signTypedData(domain, types, phantomAgent);
-
-      const res = await fetch('https://api.hyperliquid.xyz/exchange',{
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({action, nonce, signature:sig, vaultAddress: null})
-      });
-      const data = await res.json();
-      console.log('close result', JSON.stringify(data));
-      if (data?.response?.type==='order') toast('Position geschlossen ✓');
-      else toast('Antwort: '+JSON.stringify(data).slice(0,80));
+      const szi=parseFloat(pos.position.szi);
+      const nonce=Date.now();
+      const action={type:'order',orders:[{a:assetIdx,b:szi<0,p:'0',s:Math.abs(szi).toString(),r:true,t:{limit:{tif:'Ioc'}}}],grouping:'na',dex:'xyz'};
+      const actionHash=ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify(action)+nonce));
+      const sig=await wallet.signTypedData(
+        {chainId:1337,name:'Exchange',verifyingContract:'0x0000000000000000000000000000000000000000',version:'1'},
+        {Agent:[{name:'source',type:'string'},{name:'connectionId',type:'bytes32'}]},
+        {source:'a',connectionId:actionHash}
+      );
+      const res=await fetch('https://api.hyperliquid.xyz/exchange',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,nonce,signature:sig})});
+      const data=await res.json();
+      console.log('close',JSON.stringify(data));
+      toast(data?.response?.type==='order'?'Position geschlossen ✓':'Fehler: '+JSON.stringify(data).slice(0,60));
     }
-    setTimeout(load, 2000);
+    setTimeout(load,2000);
   } catch(e) {
     toast('Fehler: '+e.message);
     btn.disabled=false;
@@ -269,12 +286,7 @@ function generateIcon() {
   });
 }
 generateIcon();
-
-if (!localStorage.getItem('hl_key')) {
-  document.getElementById('setup').style.display='flex';
-} else {
-  document.getElementById('unlock').style.display='flex';
-}
+setInterval(load, 30000);
 </script>
 </body>
 </html>
