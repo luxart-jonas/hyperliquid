@@ -53,13 +53,65 @@
 <button class="btn-refresh" onclick="load()">↺ Aktualisieren</button>
 <div class="toast" id="toast"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@msgpack/msgpack@3.0.0/dist.es5+umd/msgpack.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
 <script>
+// ── Minimale Msgpack-Implementierung (nur was HL braucht) ────────
+const msgpack = {
+  encode(obj) {
+    const buf = [];
+    function write(v) {
+      if (v === null || v === undefined) { buf.push(0xc0); return; }
+      if (v === false) { buf.push(0xc2); return; }
+      if (v === true)  { buf.push(0xc3); return; }
+      if (typeof v === 'number') {
+        if (Number.isInteger(v) && v >= 0 && v <= 0x7f) { buf.push(v); return; }
+        if (Number.isInteger(v) && v >= 0 && v <= 0xffff) {
+          buf.push(0xcd, v >> 8, v & 0xff); return;
+        }
+        if (Number.isInteger(v) && v >= 0) {
+          buf.push(0xce, (v>>>24)&0xff,(v>>>16)&0xff,(v>>>8)&0xff,v&0xff); return;
+        }
+        if (Number.isInteger(v) && v >= -32) { buf.push(v & 0xff); return; }
+        // float64
+        buf.push(0xcb);
+        const ab = new ArrayBuffer(8);
+        new DataView(ab).setFloat64(0, v, false);
+        buf.push(...new Uint8Array(ab));
+        return;
+      }
+      if (typeof v === 'string') {
+        const bytes = new TextEncoder().encode(v);
+        const len = bytes.length;
+        if (len <= 31) buf.push(0xa0 | len);
+        else if (len <= 0xff) buf.push(0xd9, len);
+        else { buf.push(0xda, len>>8, len&0xff); }
+        buf.push(...bytes);
+        return;
+      }
+      if (Array.isArray(v)) {
+        const len = v.length;
+        if (len <= 15) buf.push(0x90 | len);
+        else buf.push(0xdc, len>>8, len&0xff);
+        v.forEach(write);
+        return;
+      }
+      if (typeof v === 'object') {
+        const keys = Object.keys(v);
+        const len = keys.length;
+        if (len <= 15) buf.push(0x80 | len);
+        else buf.push(0xde, len>>8, len&0xff);
+        keys.forEach(k => { write(k); write(v[k]); });
+        return;
+      }
+    }
+    write(obj);
+    return new Uint8Array(buf);
+  }
+};
+
+// ── Konstanten ───────────────────────────────────────────────────
 const WALLET = '0x6236addd817f8f364b9ea2d390341fbdfb35b15b';
 const PRIV   = '0x4a1ba82e2124b34d79ce7f2bc48a156b4dba78150f579bd12482f1d733f12ba9';
-
-// xyz DEX asset-Reihenfolge (aus perpDexs assetToStreamingOiCap, exakt diese Reihenfolge)
 const XYZ_UNIVERSE = ['AAPL','ALUMINIUM','AMD','AMZN','ARM','ASML','AVGO','BABA','BB','BE','BIRD','BRENTOIL','BX','CBRS','CL','COIN','COPPER','CORN','COST','CRCL','CRWV','DELL','DKNG','DRAM','DXY','EBAY','EUR','EWJ','EWT','EWY','EWZ','GBP','GME','GOLD','GOOGL','H100','HIMS','HOOD','HYUNDAI','IBM','IBOV','INTC','JP225','JPY','KIOXIA','KR200','KRW','LITE','LLY','META','MINIMAX','MRVL','MSFT','MSTR','MU','NATGAS','NBIS','NFLX','NIFTY','NOK','NOW','NVDA','ORCL','PALLADIUM','PLATINUM','PLTR','PURRDAT','QCOM','QNT','RIVN','RKLB','SILVER','SKHX','SMH','SMSN','SNDK','SOFTBANK','SP500','SPCX','TSLA','TSM','TTF','URANIUM','URNM','USAR','VIX','VOL','WDC','WHEAT','XLE','XYZ100','ZHIPU','ZM'];
 
 let currentPositions = [];
@@ -76,10 +128,10 @@ async function signL1Action(action, nonce) {
   const actionBytes = msgpack.encode(action);
   const nonceBuf = new ArrayBuffer(8);
   new DataView(nonceBuf).setBigUint64(0, BigInt(nonce), false);
-  const combined = new Uint8Array(actionBytes.length + 8 + 1);
+  const combined = new Uint8Array(actionBytes.length + 9);
   combined.set(actionBytes, 0);
   combined.set(new Uint8Array(nonceBuf), actionBytes.length);
-  combined.set([0x00], actionBytes.length + 8); // vaultAddress = null
+  combined[actionBytes.length + 8] = 0x00; // vaultAddress = null
   const connectionId = ethers.keccak256(combined);
   const sig = await wallet.signTypedData(
     { chainId:1337, name:'Exchange', verifyingContract:'0x0000000000000000000000000000000000000000', version:'1' },
@@ -97,13 +149,8 @@ window.closeAll = async function() {
     for (const pos of currentPositions) {
       const coinName = pos.position.coin.replace('xyz:','');
       const assetIdx = XYZ_UNIVERSE.indexOf(coinName);
-      if (assetIdx < 0) {
-        toast('Unbekannter Asset: ' + coinName + ' (idx nicht gefunden)');
-        console.log('Universe check:', XYZ_UNIVERSE.slice(0,20));
-        btn.disabled = false;
-        btn.textContent = 'Alle Positionen schließen (Market)';
-        return;
-      }
+      console.log('coinName:', coinName, 'idx:', assetIdx);
+      if (assetIdx < 0) { toast('Unbekannter Asset: ' + coinName); btn.disabled=false; btn.textContent='Alle Positionen schließen (Market)'; return; }
 
       const szi = parseFloat(pos.position.szi);
       const isBuy = szi < 0;
@@ -111,39 +158,27 @@ window.closeAll = async function() {
 
       const mids = await q({type:'allMids'});
       const mid = parseFloat(mids?.['xyz:'+coinName] || 0);
-      const limitPx = isBuy
-        ? (mid * 1.03).toFixed(2)
-        : (mid * 0.97).toFixed(2);
+      const limitPx = isBuy ? (mid*1.03).toFixed(2) : (mid*0.97).toFixed(2);
 
       const nonce = Date.now();
       const action = {
         type: 'order',
-        orders: [{ a: assetIdx, b: isBuy, p: limitPx, s: sz.toFixed(4), r: true, t: { limit: { tif: 'Ioc' } } }],
+        orders: [{ a: assetIdx, b: isBuy, p: limitPx, s: String(sz), r: true, t: { limit: { tif: 'Ioc' } } }],
         grouping: 'na',
         dex: 'xyz'
       };
-
       console.log('action:', JSON.stringify(action));
+
       const sig = await signL1Action(action, nonce);
-
-      const payload = {
-        action,
-        nonce,
-        signature: { r: sig.r, s: sig.s, v: sig.v }
-      };
-
       const res = await fetch('https://api.hyperliquid.xyz/exchange', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ action, nonce, signature:{ r:sig.r, s:sig.s, v:sig.v } })
       });
       const text = await res.text();
       console.log('response:', text);
-      let data;
-      try { data = JSON.parse(text); } catch { toast('Server: '+text.slice(0,80)); continue; }
-
+      let data; try { data=JSON.parse(text); } catch { toast('Server: '+text.slice(0,80)); continue; }
       const status = data?.response?.data?.statuses?.[0];
       if (status?.filled) toast('✓ ' + coinName + ' geschlossen @ ' + status.filled.avgPx);
-      else if (status?.resting) toast('Order aktiv: ' + JSON.stringify(status.resting));
       else if (status?.error) toast('Fehler: ' + status.error);
       else toast(JSON.stringify(data).slice(0,80));
     }
@@ -181,10 +216,10 @@ window.load = async function() {
     document.getElementById('updated').textContent = 'Stand: '+new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
     const btn = document.getElementById('close-btn');
     if (currentPositions.length > 0) {
-      btn.style.display = 'block';
-      btn.textContent = 'Schließen: '+coins.join(', ')+' (Market)';
-      btn.disabled = false;
-    } else { btn.style.display = 'none'; }
+      btn.style.display='block';
+      btn.textContent='Schließen: '+coins.join(', ')+' (Market)';
+      btn.disabled=false;
+    } else { btn.style.display='none'; }
   } catch(e) {
     document.getElementById('total').style.color='#f87171';
     document.getElementById('total').style.fontSize='16px';
@@ -193,17 +228,18 @@ window.load = async function() {
 }
 
 function toast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg; t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'), 6000);
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),6000);
 }
 
-const c = document.createElement('canvas'); c.width=c.height=192;
-const ctx = c.getContext('2d');
+// Icon
+const c=document.createElement('canvas'); c.width=c.height=192;
+const ctx=c.getContext('2d');
 ctx.fillStyle='#0a0a0a'; ctx.beginPath(); ctx.roundRect(0,0,192,192,32); ctx.fill();
 ctx.fillStyle='#4ade80'; ctx.font='bold 130px -apple-system,sans-serif';
 ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('H',96,100);
-const url = c.toDataURL();
+const url=c.toDataURL();
 ['apple-touch-icon','icon'].forEach(rel=>{
   let l=document.querySelector(`link[rel='${rel}']`);
   if(!l){l=document.createElement('link');l.rel=rel;document.head.appendChild(l);}
@@ -211,7 +247,7 @@ const url = c.toDataURL();
 });
 
 load();
-setInterval(load, 30000);
+setInterval(load,30000);
 </script>
 </body>
 </html>
