@@ -54,13 +54,11 @@
 <div class="toast" id="toast"></div>
 
 <script type="module">
-import { ethers } from 'https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.min.js';
-
-const WALLET = '0x6236aDdD817F8f364b9Ea2D390341fBdFb35B15B';
+const WALLET = '0x6236addd817f8f364b9ea2d390341fbdfb35b15b';
 const PRIV   = '0x4a1ba82e2124b34d79ce7f2bc48a156b4dba78150f579bd12482f1d733f12ba9';
 
 let currentPositions = [];
-const wallet = new ethers.Wallet(PRIV);
+let exchangeClient = null;
 
 function fmt(n) { return parseFloat(n||0).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 
@@ -69,31 +67,15 @@ async function q(body) {
   return r.json();
 }
 
-async function signAction(action, nonce) {
-  // Hyperliquid signing: hash = keccak256(msgpack-like but they use this specific scheme)
-  const msgBytes = ethers.toUtf8Bytes(JSON.stringify(action));
-  const nonceBytes = new Uint8Array(8);
-  const view = new DataView(nonceBytes.buffer);
-  view.setBigUint64(0, BigInt(nonce), false);
-  const combined = new Uint8Array(msgBytes.length + 8);
-  combined.set(msgBytes, 0);
-  combined.set(nonceBytes, msgBytes.length);
-  const actionHash = ethers.keccak256(combined);
-
-  const domain = {
-    chainId: 1337,
-    name: 'Exchange',
-    verifyingContract: '0x0000000000000000000000000000000000000000',
-    version: '1'
-  };
-  const types = {
-    Agent: [
-      { name: 'source', type: 'string' },
-      { name: 'connectionId', type: 'bytes32' }
-    ]
-  };
-  const value = { source: 'a', connectionId: actionHash };
-  return wallet.signTypedData(domain, types, value);
+async function initSDK() {
+  if (exchangeClient) return;
+  try {
+    const { ExchangeClient, HttpTransport } = await import('https://esm.sh/@nktkas/hyperliquid@0.20.0');
+    const transport = new HttpTransport();
+    exchangeClient = new ExchangeClient({ transport, wallet: PRIV });
+  } catch(e) {
+    console.error('SDK init failed:', e);
+  }
 }
 
 window.closeAll = async function() {
@@ -101,25 +83,52 @@ window.closeAll = async function() {
   btn.disabled = true;
   btn.textContent = 'Wird geschlossen…';
   try {
-    const nonce = Date.now();
-    const action = { type: 'closeAllPositions', dex: 'xyz' };
-    const sig = await signAction(action, nonce);
+    await initSDK();
+    if (!exchangeClient) throw new Error('SDK nicht geladen');
 
-    const res = await fetch('https://api.hyperliquid.xyz/exchange', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, nonce, signature: sig })
-    });
-    const text = await res.text();
-    console.log('raw response:', text);
-    let data;
-    try { data = JSON.parse(text); } catch { toast('Server: ' + text.slice(0,80)); return; }
+    // Für jeden Position eine Market-Close Order
+    const meta = await q({type:'meta', dex:'xyz'});
+    const universe = meta?.universe || [];
 
-    if (data?.status === 'ok') toast('Positionen geschlossen ✓');
-    else toast('Antwort: ' + JSON.stringify(data).slice(0,80));
+    for (const pos of currentPositions) {
+      const coinName = pos.position.coin.replace('xyz:','');
+      const assetIdx = universe.findIndex(u => u.name === coinName);
+      if (assetIdx < 0) { toast('Asset nicht gefunden: ' + coinName); continue; }
+
+      const szi = parseFloat(pos.position.szi);
+      const isBuy = szi < 0;
+      const sz = Math.abs(szi);
+
+      // Aktuellen Preis holen für slippage
+      const mids = await q({type:'allMids'});
+      const midPrice = parseFloat(mids?.['xyz:'+coinName] || 0);
+      // 2% slippage
+      const limitPx = isBuy
+        ? (midPrice * 1.02).toFixed(4)
+        : (midPrice * 0.98).toFixed(4);
+
+      const result = await exchangeClient.order({
+        orders: [{
+          a: assetIdx,
+          b: isBuy,
+          p: limitPx,
+          s: sz.toFixed(4),
+          r: true,
+          t: { limit: { tif: 'Ioc' } }
+        }],
+        grouping: 'na',
+        dex: 'xyz'
+      });
+      console.log('order result:', JSON.stringify(result));
+      const status = result?.response?.data?.statuses?.[0];
+      if (status?.filled) toast('✓ Geschlossen: ' + coinName);
+      else if (status?.error) toast('Fehler: ' + status.error);
+      else toast('Antwort: ' + JSON.stringify(result).slice(0,60));
+    }
     setTimeout(load, 2000);
   } catch(e) {
     toast('Fehler: ' + e.message);
+    console.error(e);
     btn.disabled = false;
     btn.textContent = 'Alle Positionen schließen (Market)';
   }
@@ -180,6 +189,8 @@ const url = c.toDataURL();
   l.href=url;
 });
 
+// SDK vorladen
+initSDK();
 load();
 setInterval(load, 30000);
 </script>
