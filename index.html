@@ -53,14 +53,14 @@
 <button class="btn-refresh" onclick="load()">↺ Aktualisieren</button>
 <div class="toast" id="toast"></div>
 
-<!-- msgpack -->
 <script src="https://cdn.jsdelivr.net/npm/@msgpack/msgpack@3.0.0/dist.es5+umd/msgpack.min.js"></script>
-<!-- ethers -->
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
-
 <script>
 const WALLET = '0x6236addd817f8f364b9ea2d390341fbdfb35b15b';
 const PRIV   = '0x4a1ba82e2124b34d79ce7f2bc48a156b4dba78150f579bd12482f1d733f12ba9';
+
+// xyz DEX asset-Reihenfolge (aus perpDexs assetToStreamingOiCap, exakt diese Reihenfolge)
+const XYZ_UNIVERSE = ['AAPL','ALUMINIUM','AMD','AMZN','ARM','ASML','AVGO','BABA','BB','BE','BIRD','BRENTOIL','BX','CBRS','CL','COIN','COPPER','CORN','COST','CRCL','CRWV','DELL','DKNG','DRAM','DXY','EBAY','EUR','EWJ','EWT','EWY','EWZ','GBP','GME','GOLD','GOOGL','H100','HIMS','HOOD','HYUNDAI','IBM','IBOV','INTC','JP225','JPY','KIOXIA','KR200','KRW','LITE','LLY','META','MINIMAX','MRVL','MSFT','MSTR','MU','NATGAS','NBIS','NFLX','NIFTY','NOK','NOW','NVDA','ORCL','PALLADIUM','PLATINUM','PLTR','PURRDAT','QCOM','QNT','RIVN','RKLB','SILVER','SKHX','SMH','SMSN','SNDK','SOFTBANK','SP500','SPCX','TSLA','TSM','TTF','URANIUM','URNM','USAR','VIX','VOL','WDC','WHEAT','XLE','XYZ100','ZHIPU','ZM'];
 
 let currentPositions = [];
 
@@ -71,42 +71,22 @@ async function q(body) {
   return r.json();
 }
 
-// Hyperliquid L1 Action Signing — exakt wie Python SDK sign_l1_action
-function msgpackEncode(action, nonce, isMainnet) {
-  // Reihenfolge der Felder wichtig für msgpack!
-  // connectionId = keccak256(msgpack(action) + nonce_bytes + vaultAddress_byte)
+async function signL1Action(action, nonce) {
+  const wallet = new ethers.Wallet(PRIV);
   const actionBytes = msgpack.encode(action);
   const nonceBuf = new ArrayBuffer(8);
   new DataView(nonceBuf).setBigUint64(0, BigInt(nonce), false);
-  const nonceBytes = new Uint8Array(nonceBuf);
-  // vaultAddress = null → 0x00
-  const vaultByte = new Uint8Array([0x00]);
   const combined = new Uint8Array(actionBytes.length + 8 + 1);
   combined.set(actionBytes, 0);
-  combined.set(nonceBytes, actionBytes.length);
-  combined.set(vaultByte, actionBytes.length + 8);
-  return combined;
-}
-
-async function signL1Action(action, nonce) {
-  const wallet = new ethers.Wallet(PRIV);
-  const combined = msgpackEncode(action, nonce);
+  combined.set(new Uint8Array(nonceBuf), actionBytes.length);
+  combined.set([0x00], actionBytes.length + 8); // vaultAddress = null
   const connectionId = ethers.keccak256(combined);
-
-  const domain = {
-    chainId: 1337,
-    name: 'Exchange',
-    verifyingContract: '0x0000000000000000000000000000000000000000',
-    version: '1'
-  };
-  const types = {
-    Agent: [
-      { name: 'source', type: 'string' },
-      { name: 'connectionId', type: 'bytes32' }
-    ]
-  };
-  const value = { source: 'a', connectionId };
-  return wallet.signTypedData(domain, types, value);
+  const sig = await wallet.signTypedData(
+    { chainId:1337, name:'Exchange', verifyingContract:'0x0000000000000000000000000000000000000000', version:'1' },
+    { Agent:[{name:'source',type:'string'},{name:'connectionId',type:'bytes32'}] },
+    { source:'a', connectionId }
+  );
+  return ethers.Signature.from(sig);
 }
 
 window.closeAll = async function() {
@@ -114,53 +94,56 @@ window.closeAll = async function() {
   btn.disabled = true;
   btn.textContent = 'Wird geschlossen…';
   try {
-    const meta = await q({type:'meta', dex:'xyz'});
-    const universe = meta?.universe || [];
-
     for (const pos of currentPositions) {
       const coinName = pos.position.coin.replace('xyz:','');
-      const assetIdx = universe.findIndex(u => u.name === coinName);
-      if (assetIdx < 0) { toast('Asset nicht gefunden: ' + coinName); continue; }
+      const assetIdx = XYZ_UNIVERSE.indexOf(coinName);
+      if (assetIdx < 0) {
+        toast('Unbekannter Asset: ' + coinName + ' (idx nicht gefunden)');
+        console.log('Universe check:', XYZ_UNIVERSE.slice(0,20));
+        btn.disabled = false;
+        btn.textContent = 'Alle Positionen schließen (Market)';
+        return;
+      }
 
       const szi = parseFloat(pos.position.szi);
       const isBuy = szi < 0;
       const sz = Math.abs(szi);
 
-      // Aktuellen Preis + 3% Slippage für sicheres Fill
       const mids = await q({type:'allMids'});
       const mid = parseFloat(mids?.['xyz:'+coinName] || 0);
       const limitPx = isBuy
-        ? String((mid * 1.03).toFixed(4))
-        : String((mid * 0.97).toFixed(4));
+        ? (mid * 1.03).toFixed(2)
+        : (mid * 0.97).toFixed(2);
 
       const nonce = Date.now();
+      const action = {
+        type: 'order',
+        orders: [{ a: assetIdx, b: isBuy, p: limitPx, s: sz.toFixed(4), r: true, t: { limit: { tif: 'Ioc' } } }],
+        grouping: 'na',
+        dex: 'xyz'
+      };
 
-      // Exakte Reihenfolge wie Python SDK OrderRequest
-      const order = { a: assetIdx, b: isBuy, p: limitPx, s: String(sz), r: true, t: { limit: { tif: 'Ioc' } } };
-      const action = { type: 'order', orders: [order], grouping: 'na', dex: 'xyz' };
-
+      console.log('action:', JSON.stringify(action));
       const sig = await signL1Action(action, nonce);
-      const sigObj = ethers.Signature.from(sig);
 
       const payload = {
         action,
         nonce,
-        signature: { r: sigObj.r, s: sigObj.s, v: sigObj.v }
+        signature: { r: sig.r, s: sig.s, v: sig.v }
       };
 
       const res = await fetch('https://api.hyperliquid.xyz/exchange', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify(payload)
       });
       const text = await res.text();
       console.log('response:', text);
       let data;
-      try { data = JSON.parse(text); } catch { toast('Server: ' + text.slice(0,80)); continue; }
+      try { data = JSON.parse(text); } catch { toast('Server: '+text.slice(0,80)); continue; }
 
       const status = data?.response?.data?.statuses?.[0];
-      if (status?.filled) toast('✓ ' + coinName + ' geschlossen');
-      else if (status?.resting) toast('✓ Order platziert');
+      if (status?.filled) toast('✓ ' + coinName + ' geschlossen @ ' + status.filled.avgPx);
+      else if (status?.resting) toast('Order aktiv: ' + JSON.stringify(status.resting));
       else if (status?.error) toast('Fehler: ' + status.error);
       else toast(JSON.stringify(data).slice(0,80));
     }
@@ -212,10 +195,9 @@ window.load = async function() {
 function toast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'), 5000);
+  setTimeout(()=>t.classList.remove('show'), 6000);
 }
 
-// Icon
 const c = document.createElement('canvas'); c.width=c.height=192;
 const ctx = c.getContext('2d');
 ctx.fillStyle='#0a0a0a'; ctx.beginPath(); ctx.roundRect(0,0,192,192,32); ctx.fill();
