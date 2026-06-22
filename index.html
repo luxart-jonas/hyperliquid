@@ -54,23 +54,29 @@ let positions = [];
 function fmt(n){return parseFloat(n||0).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});}
 async function q(b){const r=await fetch('https://api.hyperliquid.xyz/info',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});return r.json();}
 
-// Größe floor-truncaten auf szDecimals (keine trailing zeroes)
-function formatSz(sz, szDecimals) {
-  const factor = Math.pow(10, szDecimals);
-  const truncated = Math.floor(Math.abs(sz) * factor) / factor;
-  // trailing zeroes entfernen
-  return truncated.toFixed(szDecimals).replace(/\.?0+$/, '') || '0';
+function floatToWire(x, decimals) {
+  // Floor-truncate, dann trailing zeroes weg
+  const factor = Math.pow(10, decimals);
+  const val = Math.floor(Math.abs(x) * factor) / factor;
+  let s = val.toFixed(decimals);
+  s = s.replace(/\.?0+$/, '');
+  return s || '0';
 }
 
-// Preis: max 5 signifikante Stellen, max (6-szDecimals) Dezimalstellen
-function formatPx(px, szDecimals) {
-  const maxDecimals = 6 - szDecimals;
-  // Auf 5 signifikante Stellen
-  const sigFigs = parseFloat(px.toPrecision(5));
-  // Auf maxDecimals Dezimalstellen
-  const factor = Math.pow(10, maxDecimals);
-  const rounded = Math.round(sigFigs * factor) / factor;
-  return String(rounded);
+function pxToWire(px, szDecimals) {
+  // Max 5 significant figures, max (6-szDecimals) decimal places
+  const maxDec = 6 - szDecimals;
+  // Runde auf 5 sig figs
+  const magnitude = Math.floor(Math.log10(Math.abs(px)));
+  const factor = Math.pow(10, 4 - magnitude);
+  const rounded = Math.round(px * factor) / factor;
+  // Dann auf maxDec Dezimalstellen
+  const factor2 = Math.pow(10, maxDec);
+  const final = Math.round(rounded * factor2) / factor2;
+  // Trailing zeroes weg
+  let s = final.toFixed(maxDec);
+  s = s.replace(/\.?0+$/, '');
+  return s;
 }
 
 function mpPack(obj){
@@ -134,25 +140,36 @@ window.closeAll = async function(){
     const meta = await q({type:'metaAndAssetCtxs', dex:'xyz'});
     const universe = meta?.[0]?.universe || [];
 
+    // Debug: zeige alle assets mit szDecimals
+    console.log('universe length:', universe.length);
+    universe.forEach((a,i) => console.log(i, a.name, 'szDec:', a.szDecimals));
+
     for(const pos of positions){
       const fullCoin = pos.position.coin;
       const name = fullCoin.replace('xyz:','');
       const idx = XYZ.indexOf(name);
       if(idx < 0){ toast('Unbekannt: '+name); btn.disabled=false; btn.textContent='Schliessen (Market)'; return; }
 
-      const assetMeta = universe[idx];
+      // Suche per Name statt per Index!
+      const assetMeta = universe.find(a => a.name === name) || universe[idx];
       const szDecimals = assetMeta?.szDecimals ?? 3;
+      console.log('Asset:', name, 'idx:', idx, 'szDecimals:', szDecimals, 'meta:', JSON.stringify(assetMeta));
 
       const sziFloat = parseFloat(pos.position.szi);
       const isBuy = sziFloat < 0;
-      const sz = formatSz(Math.abs(sziFloat), szDecimals);
+
+      // Versuche verschiedene Size-Formate
+      const szRaw = Math.abs(sziFloat);
+      const sz = floatToWire(szRaw, szDecimals);
+      console.log('sz raw:', szRaw, 'sz wire:', sz);
 
       const mids = await q({type:'allMids', dex:'xyz'});
       const mid = parseFloat(mids?.[fullCoin] || mids?.[name] || 0);
       if(!mid){ toast('Kein Preis: '+name); btn.disabled=false; btn.textContent='Schliessen (Market)'; return; }
 
       const rawPx = isBuy ? mid * 1.03 : mid * 0.97;
-      const px = formatPx(rawPx, szDecimals);
+      const px = pxToWire(rawPx, szDecimals);
+      console.log('mid:', mid, 'rawPx:', rawPx, 'px wire:', px);
 
       const nonce = Date.now();
       const action = {
@@ -160,13 +177,13 @@ window.closeAll = async function(){
         orders: [{a: idx, b: isBuy, p: px, s: sz, r: true, t: {limit: {tif: 'Ioc'}}}],
         grouping: 'na'
       };
-      console.log('sz:', sz, 'px:', px, 'action:', JSON.stringify(action));
+      console.log('FINAL action:', JSON.stringify(action));
       const sig = await signL1Action(action, nonce);
       const payload = {action, nonce, signature:{r:sig.r, s:sig.s, v:sig.v}, vaultAddress:null};
 
       const res = await fetch('https://api.hyperliquid.xyz/exchange',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
       const txt = await res.text();
-      console.log('response:', txt);
+      console.log('RESPONSE:', txt);
       let d; try{d=JSON.parse(txt);}catch{toast('Server: '+txt.slice(0,100));continue;}
       const st = d?.response?.data?.statuses?.[0];
       if(st?.filled) toast('Geschlossen: '+name+' @ '+st.filled.avgPx);
