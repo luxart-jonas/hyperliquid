@@ -6,9 +6,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="HL Balance">
-<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="theme-color" content="#0a0a0a">
-<link rel="manifest" href="data:application/json,{%22name%22:%22HL%20Balance%22,%22short_name%22:%22HL%22,%22start_url%22:%22.%22,%22display%22:%22standalone%22,%22background_color%22:%22%230a0a0a%22,%22theme_color%22:%22%230a0a0a%22}">
 <title>HL Balance</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
@@ -28,117 +26,255 @@
   .pos { color:#4ade80; }
   .neg { color:#f87171; }
   .neu { color:#555; }
-  .coin-tag { font-size:12px; color:#555; letter-spacing:0.06em; }
-  .divider { width:40px; height:1px; background:#1e1e1e; margin:2.4rem 0; }
+  .coin-tag { font-size:12px; color:#555; }
+  .divider { width:40px; height:1px; background:#1e1e1e; margin:2rem 0; }
   .meta { font-size:14px; color:#444; }
-  .refresh-btn {
-    margin-top:2rem; background:none; border:1px solid #252525; color:#666;
-    font-size:13px; letter-spacing:0.12em; text-transform:uppercase;
-    padding:12px 28px; border-radius:99px; cursor:pointer;
+  .btn-close {
+    width:100%; max-width:360px; margin-top:1.2rem;
+    padding:16px; border-radius:14px; border:1px solid #2a1a1a;
+    background:#1a1a1a; color:#f87171;
+    font-size:16px; font-weight:600; cursor:pointer; letter-spacing:0.04em;
   }
-  .refresh-btn:active { border-color:#555; color:#bbb; }
+  .btn-close:active { background:#2a1a1a; }
+  .btn-close:disabled { opacity:0.4; cursor:not-allowed; }
+  .btn-refresh { background:none; border:1px solid #252525; color:#666; font-size:13px; letter-spacing:0.12em; text-transform:uppercase; padding:12px 28px; border-radius:99px; cursor:pointer; margin-top:1.5rem; }
+  .btn-refresh:active { border-color:#555; color:#bbb; }
+  #setup, #unlock {
+    position:fixed; inset:0; background:#0a0a0a;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:2rem; gap:1rem; z-index:100;
+  }
+  #setup h2, #unlock h2 { font-size:20px; font-weight:600; margin-bottom:0.5rem; }
+  #setup p { font-size:14px; color:#666; text-align:center; line-height:1.6; max-width:300px; }
+  .inp {
+    width:100%; max-width:320px; background:#141414; border:1px solid #333;
+    color:#fff; font-size:16px; padding:14px 16px; border-radius:12px; outline:none;
+  }
+  .inp::placeholder { color:#444; }
+  .btn-green { background:#4ade80; color:#000; font-size:16px; font-weight:700; padding:16px; border-radius:14px; border:none; width:100%; max-width:320px; cursor:pointer; margin-top:0.5rem; }
+  .btn-green:active { background:#22c55e; }
+  .toast { position:fixed; bottom:2rem; left:50%; transform:translateX(-50%); background:#1a1a1a; border:1px solid #333; color:#fff; padding:12px 24px; border-radius:12px; font-size:14px; opacity:0; transition:opacity 0.3s; pointer-events:none; white-space:nowrap; }
+  .toast.show { opacity:1; }
   .loading { color:#222; animation:pulse 1.2s ease-in-out infinite; }
   @keyframes pulse { 0%,100%{opacity:.3} 50%{opacity:1} }
 </style>
 </head>
 <body>
 
-<div class="label">Kontostand</div>
-<div id="total" class="total loading">…</div>
-
-<div class="cards">
-  <div class="card">
-    <div class="card-label">Unrealized PnL</div>
-    <div id="pnl" class="card-value neu">—</div>
-    <div id="coin" class="coin-tag"></div>
-  </div>
-  <div class="card">
-    <div class="card-label">Reserviert</div>
-    <div id="hold" class="card-value">—</div>
-  </div>
+<div id="setup" style="display:none;">
+  <h2>HL Balance — Setup</h2>
+  <p>Wähle ein Passwort. Dein API-Key wird verschlüsselt gespeichert.</p>
+  <input class="inp" type="password" id="setup-pw" placeholder="Passwort wählen" autocomplete="new-password">
+  <input class="inp" type="password" id="setup-pw2" placeholder="Passwort wiederholen" autocomplete="new-password">
+  <button class="btn-green" onclick="doSetup()">Speichern & starten</button>
 </div>
 
-<div class="divider"></div>
-<div id="updated" class="meta">wird geladen…</div>
-<button class="refresh-btn" onclick="load()">↺ Aktualisieren</button>
+<div id="unlock" style="display:none;">
+  <h2>🔒 HL Balance</h2>
+  <input class="inp" type="password" id="unlock-pw" placeholder="Passwort" autocomplete="current-password">
+  <button class="btn-green" onclick="doUnlock()">Entsperren</button>
+</div>
+
+<div id="main" style="display:none; flex-direction:column; align-items:center; width:100%;">
+  <div class="label">Kontostand</div>
+  <div id="total" class="total loading">…</div>
+  <div class="cards">
+    <div class="card">
+      <div class="card-label">Unrealized PnL</div>
+      <div id="pnl" class="card-value neu">—</div>
+      <div id="coin" class="coin-tag"></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Reserviert</div>
+      <div id="hold" class="card-value">—</div>
+    </div>
+  </div>
+  <button id="close-btn" class="btn-close" style="display:none;" onclick="closePosition()">Position schließen (Market)</button>
+  <div class="divider"></div>
+  <div id="updated" class="meta">wird geladen…</div>
+  <button class="btn-refresh" onclick="load()">↺ Aktualisieren</button>
+</div>
+
+<div class="toast" id="toast"></div>
 
 <script>
-const WALLET = '0x6236aDdD817F8f364b9Ea2D390341fBdFb35B15B';
+const WALLET  = '0x6236aDdD817F8f364b9Ea2D390341fBdFb35B15B';
+const AGENT   = '0x78848254D412f6907E7fa6707D5Ef8c2638d6687';
+const RAW_KEY = '0x4a1ba82e2124b34d79ce7f2bc48a156b4dba78150f579bd12482f1d733f12ba9';
 
-function fmt(n) {
-  return parseFloat(n||0).toLocaleString('de-DE', {minimumFractionDigits:2, maximumFractionDigits:2});
+let apiPrivKey = null;
+let currentPositions = [];
+
+async function deriveKey(pw, salt) {
+  const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:100000,hash:'SHA-256'}, km, {name:'AES-GCM',length:256}, false, ['encrypt','decrypt']);
+}
+async function encrypt(text, pw) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv   = crypto.getRandomValues(new Uint8Array(12));
+  const key  = await deriveKey(pw, salt);
+  const ct   = await crypto.subtle.encrypt({name:'AES-GCM',iv}, key, new TextEncoder().encode(text));
+  const buf  = new Uint8Array(16 + 12 + ct.byteLength);
+  buf.set(salt,0); buf.set(iv,16); buf.set(new Uint8Array(ct),28);
+  return btoa(String.fromCharCode(...buf));
+}
+async function decrypt(b64, pw) {
+  const buf = Uint8Array.from(atob(b64), c=>c.charCodeAt(0));
+  const key = await deriveKey(pw, buf.slice(0,16));
+  const pt  = await crypto.subtle.decrypt({name:'AES-GCM',iv:buf.slice(16,28)}, key, buf.slice(28));
+  return new TextDecoder().decode(pt);
 }
 
+async function doSetup() {
+  const pw  = document.getElementById('setup-pw').value;
+  const pw2 = document.getElementById('setup-pw2').value;
+  if (pw.length < 4)   return toast('Passwort zu kurz (min. 4 Zeichen)');
+  if (pw !== pw2)      return toast('Passwörter stimmen nicht überein');
+  const enc = await encrypt(RAW_KEY, pw);
+  localStorage.setItem('hl_key', enc);
+  apiPrivKey = RAW_KEY;
+  document.getElementById('setup').style.display = 'none';
+  showMain();
+}
+
+async function doUnlock() {
+  const pw  = document.getElementById('unlock-pw').value;
+  const enc = localStorage.getItem('hl_key');
+  try {
+    apiPrivKey = await decrypt(enc, pw);
+    document.getElementById('unlock').style.display = 'none';
+    showMain();
+  } catch { toast('Falsches Passwort'); }
+}
+document.addEventListener('keydown', e => { if(e.key==='Enter') { if(document.getElementById('unlock').style.display!=='none') doUnlock(); if(document.getElementById('setup').style.display!=='none') doSetup(); }});
+
+function showMain() {
+  document.getElementById('main').style.display = 'flex';
+  load();
+}
+
+function fmt(n) { return parseFloat(n||0).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 async function q(body) {
-  const r = await fetch('https://api.hyperliquid.xyz/info', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify(body)
-  });
+  const r = await fetch('https://api.hyperliquid.xyz/info',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   return r.json();
 }
 
 async function load() {
-  document.getElementById('total').className = 'total loading';
-  document.getElementById('total').textContent = '…';
+  document.getElementById('total').className='total loading';
+  document.getElementById('total').textContent='…';
   try {
     const [spotData, xyzData] = await Promise.all([
-      q({type:'spotClearinghouseState', user:WALLET}),
-      q({type:'clearinghouseState', user:WALLET, dex:'xyz'})
+      q({type:'spotClearinghouseState',user:WALLET}),
+      q({type:'clearinghouseState',user:WALLET,dex:'xyz'})
     ]);
-    const usdc = (spotData.balances||[]).find(b=>b.coin==='USDC') || {};
+    const usdc = (spotData.balances||[]).find(b=>b.coin==='USDC')||{};
     const spotTotal = parseFloat(usdc.total||0);
     const holdVal   = parseFloat(usdc.hold||0);
-    let pnl = 0, coins = [];
-    for (const p of (xyzData.assetPositions||[])) {
+    currentPositions = xyzData.assetPositions||[];
+    let pnl=0, coins=[];
+    for (const p of currentPositions) {
       pnl += parseFloat(p?.position?.unrealizedPnl||0);
       if (p?.position?.coin) coins.push(p.position.coin.replace('xyz:',''));
     }
-    document.getElementById('total').className = 'total';
-    document.getElementById('total').innerHTML = fmt(spotTotal) + '<span class="currency">$</span>';
-    const pnlEl = document.getElementById('pnl');
-    pnlEl.textContent = pnl === 0 ? '—' : (pnl>=0?'+':'') + fmt(pnl) + ' $';
-    pnlEl.className = 'card-value ' + (pnl>0?'pos':pnl<0?'neg':'neu');
-    document.getElementById('coin').textContent = coins.join(', ');
-    document.getElementById('hold').textContent = fmt(holdVal) + ' $';
-    document.getElementById('updated').textContent =
-      'Stand: ' + new Date().toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    document.getElementById('total').className='total';
+    document.getElementById('total').innerHTML=fmt(spotTotal)+'<span class="currency">$</span>';
+    const pnlEl=document.getElementById('pnl');
+    pnlEl.textContent=pnl===0?'—':(pnl>=0?'+':'')+fmt(pnl)+' $';
+    pnlEl.className='card-value '+(pnl>0?'pos':pnl<0?'neg':'neu');
+    document.getElementById('coin').textContent=coins.join(', ');
+    document.getElementById('hold').textContent=fmt(holdVal)+' $';
+    document.getElementById('updated').textContent='Stand: '+new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    const btn=document.getElementById('close-btn');
+    if (currentPositions.length>0) {
+      btn.style.display='block';
+      btn.textContent='Position schließen: '+coins.join(', ')+' (Market)';
+      btn.disabled=false;
+    } else { btn.style.display='none'; }
   } catch(e) {
-    const el = document.getElementById('total');
-    el.className='total'; el.style.fontSize='18px'; el.style.color='#f87171';
-    el.textContent='Fehler: '+e.message;
+    document.getElementById('total').className='total';
+    document.getElementById('total').style.fontSize='16px';
+    document.getElementById('total').style.color='#f87171';
+    document.getElementById('total').textContent='Fehler: '+e.message;
   }
 }
 
-// PWA Icon als Canvas generieren und als apple-touch-icon einsetzen
-function generateIcon() {
-  const canvas = document.createElement('canvas');
-  canvas.width = 192; canvas.height = 192;
-  const ctx = canvas.getContext('2d');
-  // Hintergrund
-  ctx.fillStyle = '#0a0a0a';
-  ctx.beginPath();
-  ctx.roundRect(0, 0, 192, 192, 32);
-  ctx.fill();
-  // Grünes H
-  ctx.fillStyle = '#4ade80';
-  ctx.font = 'bold 130px -apple-system, BlinkMacSystemFont, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('H', 96, 100);
-  const dataUrl = canvas.toDataURL('image/png');
-  // Als apple-touch-icon einsetzen
-  let link = document.querySelector("link[rel='apple-touch-icon']");
-  if (!link) { link = document.createElement('link'); link.rel = 'apple-touch-icon'; document.head.appendChild(link); }
-  link.href = dataUrl;
-  // Auch als normales favicon
-  let fav = document.querySelector("link[rel='icon']");
-  if (!fav) { fav = document.createElement('link'); fav.rel = 'icon'; document.head.appendChild(fav); }
-  fav.href = dataUrl;
+async function closePosition() {
+  if (!apiPrivKey || currentPositions.length===0) return;
+  const btn=document.getElementById('close-btn');
+  btn.disabled=true; btn.textContent='Wird geschlossen…';
+  try {
+    const {ethers} = await import('https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.min.js');
+    const wallet = new ethers.Wallet(apiPrivKey);
+
+    // Meta für xyz DEX holen
+    const meta = await q({type:'meta',dex:'xyz'});
+    const universe = meta?.universe||[];
+
+    for (const pos of currentPositions) {
+      const coinName = pos.position.coin.replace('xyz:','');
+      const assetIdx = universe.findIndex(u=>u.name===coinName);
+      if (assetIdx<0) { toast('Asset nicht gefunden: '+coinName); continue; }
+      const szi  = parseFloat(pos.position.szi);
+      const isBuy = szi < 0;
+      const sz   = Math.abs(szi).toString();
+      const nonce = Date.now();
+
+      const action = {
+        type:'order',
+        orders:[{ a:assetIdx, b:isBuy, p:'0', s:sz, r:true, t:{limit:{tif:'Ioc'}} }],
+        grouping:'na',
+        dex:'xyz'
+      };
+
+      const actionHash = ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify(action)+nonce));
+      const phantomAgent = { source:'a', connectionId:actionHash };
+      const domain = { chainId:1337, name:'Exchange', verifyingContract:'0x0000000000000000000000000000000000000000', version:'1' };
+      const types  = { Agent:[{name:'source',type:'string'},{name:'connectionId',type:'bytes32'}] };
+      const sig = await wallet.signTypedData(domain, types, phantomAgent);
+
+      const res = await fetch('https://api.hyperliquid.xyz/exchange',{
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({action, nonce, signature:sig, vaultAddress: null})
+      });
+      const data = await res.json();
+      console.log('close result', JSON.stringify(data));
+      if (data?.response?.type==='order') toast('Position geschlossen ✓');
+      else toast('Antwort: '+JSON.stringify(data).slice(0,80));
+    }
+    setTimeout(load, 2000);
+  } catch(e) {
+    toast('Fehler: '+e.message);
+    btn.disabled=false;
+    btn.textContent='Position schließen (Market)';
+  }
 }
 
+function toast(msg) {
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),4000);
+}
+
+function generateIcon() {
+  const c=document.createElement('canvas'); c.width=c.height=192;
+  const ctx=c.getContext('2d');
+  ctx.fillStyle='#0a0a0a'; ctx.beginPath(); ctx.roundRect(0,0,192,192,32); ctx.fill();
+  ctx.fillStyle='#4ade80'; ctx.font='bold 130px -apple-system,sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('H',96,100);
+  const url=c.toDataURL();
+  ['apple-touch-icon','icon'].forEach(rel=>{
+    let l=document.querySelector(`link[rel='${rel}']`);
+    if(!l){l=document.createElement('link');l.rel=rel;document.head.appendChild(l);}
+    l.href=url;
+  });
+}
 generateIcon();
-load();
-setInterval(load, 30000);
+
+if (!localStorage.getItem('hl_key')) {
+  document.getElementById('setup').style.display='flex';
+} else {
+  document.getElementById('unlock').style.display='flex';
+}
 </script>
 </body>
 </html>
