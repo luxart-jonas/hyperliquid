@@ -47,7 +47,6 @@ body{background:#0a0a0a;color:#fff;font-family:-apple-system,BlinkMacSystemFont,
 <script>
 const WALLET = '0x6236addd817f8f364b9ea2d390341fbdfb35b15b';
 const PRIV   = '0x4a1ba82e2124b34d79ce7f2bc48a156b4dba78150f579bd12482f1d733f12ba9';
-// xyz asset index: Position in universe (alphabetisch sortiert wie in perpDexs)
 const XYZ = ['AAPL','ALUMINIUM','AMD','AMZN','ARM','ASML','AVGO','BABA','BB','BE','BIRD','BRENTOIL','BX','CBRS','CL','COIN','COPPER','CORN','COST','CRCL','CRWV','DELL','DKNG','DRAM','DXY','EBAY','EUR','EWJ','EWT','EWY','EWZ','GBP','GME','GOLD','GOOGL','H100','HIMS','HOOD','HYUNDAI','IBM','IBOV','INTC','JP225','JPY','KIOXIA','KR200','KRW','LITE','LLY','META','MINIMAX','MRVL','MSFT','MSTR','MU','NATGAS','NBIS','NFLX','NIFTY','NOK','NOW','NVDA','ORCL','PALLADIUM','PLATINUM','PLTR','PURRDAT','QCOM','QNT','RIVN','RKLB','SILVER','SKHX','SMH','SMSN','SNDK','SOFTBANK','SP500','SPCX','TSLA','TSM','TTF','URANIUM','URNM','USAR','VIX','VOL','WDC','WHEAT','XLE','XYZ100','ZHIPU','ZM'];
 
 let positions = [];
@@ -55,7 +54,6 @@ let positions = [];
 function fmt(n){return parseFloat(n||0).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});}
 async function q(b){const r=await fetch('https://api.hyperliquid.xyz/info',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});return r.json();}
 
-// Msgpack inline - exakt wie Python msgpack.packb
 function mpPack(obj){
   const buf=[];
   function w(v){
@@ -68,7 +66,6 @@ function mpPack(obj){
       if(Number.isInteger(v)&&v>=0&&v<=0xffff){buf.push(0xcd,v>>8,v&0xff);return;}
       if(Number.isInteger(v)&&v>=0){buf.push(0xce,(v>>>24)&0xff,(v>>>16)&0xff,(v>>>8)&0xff,v&0xff);return;}
       if(Number.isInteger(v)&&v>=-32){buf.push(v&0xff);return;}
-      if(Number.isInteger(v)&&v>=-128){buf.push(0xd0,v&0xff);return;}
       buf.push(0xcb);const ab=new ArrayBuffer(8);new DataView(ab).setFloat64(0,v,false);buf.push(...new Uint8Array(ab));return;
     }
     if(typeof v==='string'){
@@ -95,17 +92,14 @@ function mpPack(obj){
 
 async function signL1Action(action, nonce){
   const wallet = new ethers.Wallet(PRIV);
-  // Exakt wie Python: msgpack.packb(action) + nonce.to_bytes(8,'big') + b'\x00'
   const packed = mpPack(action);
   const nb = new ArrayBuffer(8);
   new DataView(nb).setBigUint64(0, BigInt(nonce), false);
   const combined = new Uint8Array(packed.length + 9);
   combined.set(packed, 0);
   combined.set(new Uint8Array(nb), packed.length);
-  combined[packed.length + 8] = 0x00; // vault_address = None
+  combined[packed.length + 8] = 0x00;
   const hash = ethers.keccak256(combined);
-  // construct_phantom_agent: {source: 'a', connectionId: hash}
-  // l1_payload domain
   const sig = await wallet.signTypedData(
     {chainId:1337, name:'Exchange', verifyingContract:'0x0000000000000000000000000000000000000000', version:'1'},
     {Agent:[{name:'source',type:'string'},{name:'connectionId',type:'bytes32'}]},
@@ -118,46 +112,46 @@ window.closeAll = async function(){
   const btn = document.getElementById('close-btn');
   btn.disabled = true; btn.textContent = 'Schliessen...';
   try {
+    // Meta holen um szDecimals zu kennen
+    const meta = await q({type:'metaAndAssetCtxs', dex:'xyz'});
+    const universe = meta?.[0]?.universe || [];
+
     for(const pos of positions){
-      const fullCoin = pos.position.coin; // z.B. "xyz:CL"
+      const fullCoin = pos.position.coin;
       const name = fullCoin.replace('xyz:','');
       const idx = XYZ.indexOf(name);
       if(idx < 0){ toast('Unbekannt: '+name); btn.disabled=false; btn.textContent='Schliessen (Market)'; return; }
 
-      const szi = parseFloat(pos.position.szi);
-      const isBuy = szi < 0;
-      const sz = Math.abs(szi);
+      // szDecimals aus meta
+      const assetMeta = universe[idx];
+      const szDecimals = assetMeta?.szDecimals ?? 3;
+      console.log('szDecimals for '+name+':', szDecimals);
 
-      // Preis via allMids mit dex
+      const szi = pos.position.szi; // String direkt verwenden!
+      const sziFloat = parseFloat(szi);
+      const isBuy = sziFloat < 0;
+      // Größe exakt wie in Position, auf szDecimals gerundet
+      const sz = Math.abs(sziFloat).toFixed(szDecimals);
+
       const mids = await q({type:'allMids', dex:'xyz'});
       const mid = parseFloat(mids?.[fullCoin] || mids?.[name] || 0);
-      if(!mid){ toast('Kein Preis fuer '+name); btn.disabled=false; btn.textContent='Schliessen (Market)'; return; }
-      const slippage = 0.03;
-      const px = isBuy ? (mid*(1+slippage)).toFixed(4) : (mid*(1-slippage)).toFixed(4);
+      if(!mid){ toast('Kein Preis: '+name); btn.disabled=false; btn.textContent='Schliessen (Market)'; return; }
+
+      // Preis-Decimals aus meta
+      const pxDecimals = 4;
+      const px = isBuy ? (mid*1.03).toFixed(pxDecimals) : (mid*0.97).toFixed(pxDecimals);
 
       const nonce = Date.now();
-      // Action OHNE dex - exakt wie Python SDK
       const action = {
         type: 'order',
-        orders: [{a: idx, b: isBuy, p: px, s: String(sz), r: true, t: {limit: {tif: 'Ioc'}}}],
+        orders: [{a: idx, b: isBuy, p: px, s: sz, r: true, t: {limit: {tif: 'Ioc'}}}],
         grouping: 'na'
       };
       console.log('action:', JSON.stringify(action));
       const sig = await signL1Action(action, nonce);
+      const payload = {action, nonce, signature:{r:sig.r, s:sig.s, v:sig.v}, vaultAddress:null};
 
-      // POST body: action, nonce, signature, vaultAddress=null
-      const payload = {
-        action,
-        nonce,
-        signature: {r: sig.r, s: sig.s, v: sig.v},
-        vaultAddress: null
-      };
-      console.log('payload:', JSON.stringify(payload));
-
-      const res = await fetch('https://api.hyperliquid.xyz/exchange',{
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify(payload)
-      });
+      const res = await fetch('https://api.hyperliquid.xyz/exchange',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
       const txt = await res.text();
       console.log('response:', txt);
       let d; try{d=JSON.parse(txt);}catch{toast('Server: '+txt.slice(0,100));continue;}
@@ -209,7 +203,6 @@ window.load = async function(){
 
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),7000);}
 
-// Icon
 const cv=document.createElement('canvas');cv.width=cv.height=192;
 const cx=cv.getContext('2d');cx.fillStyle='#0a0a0a';cx.beginPath();cx.roundRect(0,0,192,192,32);cx.fill();
 cx.fillStyle='#4ade80';cx.font='bold 130px sans-serif';cx.textAlign='center';cx.textBaseline='middle';cx.fillText('H',96,100);
