@@ -10,12 +10,7 @@
 <title>HL Balance</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  body {
-    background:#0a0a0a; color:#fff;
-    font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    min-height:100vh; display:flex; flex-direction:column;
-    align-items:center; justify-content:center; padding:2rem;
-  }
+  body { background:#0a0a0a; color:#fff; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:2rem; }
   .label { font-size:16px; letter-spacing:0.12em; text-transform:uppercase; color:#888; margin-bottom:12px; }
   .total { font-size:76px; font-weight:700; letter-spacing:-3px; line-height:1; color:#fff; }
   .currency { font-size:28px; font-weight:400; color:#999; margin-left:6px; }
@@ -23,22 +18,14 @@
   .card { flex:1; background:#141414; border:1px solid #222; border-radius:14px; padding:16px; display:flex; flex-direction:column; gap:8px; }
   .card-label { font-size:13px; letter-spacing:0.1em; text-transform:uppercase; color:#666; }
   .card-value { font-size:24px; font-weight:600; color:#ddd; }
-  .pos { color:#4ade80; }
-  .neg { color:#f87171; }
-  .neu { color:#555; }
+  .pos { color:#4ade80; } .neg { color:#f87171; } .neu { color:#555; }
   .coin-tag { font-size:12px; color:#555; }
   .divider { width:40px; height:1px; background:#1e1e1e; margin:2rem 0; }
   .meta { font-size:14px; color:#444; }
-  .btn-close {
-    width:100%; max-width:360px; margin-top:1.2rem;
-    padding:16px; border-radius:14px; border:1px solid #2a1a1a;
-    background:#1a1a1a; color:#f87171;
-    font-size:16px; font-weight:600; cursor:pointer;
-  }
+  .btn-close { width:100%; max-width:360px; margin-top:1.2rem; padding:16px; border-radius:14px; border:1px solid #2a1a1a; background:#1a1a1a; color:#f87171; font-size:16px; font-weight:600; cursor:pointer; }
   .btn-close:active { background:#2a1a1a; }
   .btn-close:disabled { opacity:0.4; cursor:not-allowed; }
   .btn-refresh { background:none; border:1px solid #252525; color:#666; font-size:13px; letter-spacing:0.12em; text-transform:uppercase; padding:12px 28px; border-radius:99px; cursor:pointer; margin-top:1.5rem; }
-  .btn-refresh:active { border-color:#555; color:#bbb; }
   .toast { position:fixed; bottom:2rem; left:50%; transform:translateX(-50%); background:#1a1a1a; border:1px solid #333; color:#fff; padding:12px 24px; border-radius:12px; font-size:14px; opacity:0; transition:opacity 0.3s; pointer-events:none; white-space:nowrap; z-index:999; }
   .toast.show { opacity:1; }
   .loading { color:#222; animation:pulse 1.2s ease-in-out infinite; }
@@ -49,7 +36,6 @@
 
 <div class="label">Kontostand</div>
 <div id="total" class="total loading">…</div>
-
 <div class="cards">
   <div class="card">
     <div class="card-label">Unrealized PnL</div>
@@ -61,22 +47,20 @@
     <div id="hold" class="card-value">—</div>
   </div>
 </div>
-
-<button id="close-btn" class="btn-close" style="display:none;" onclick="closeAll()">
-  Alle Positionen schließen (Market)
-</button>
-
+<button id="close-btn" class="btn-close" style="display:none;" onclick="closeAll()">Alle Positionen schließen (Market)</button>
 <div class="divider"></div>
 <div id="updated" class="meta">wird geladen…</div>
 <button class="btn-refresh" onclick="load()">↺ Aktualisieren</button>
 <div class="toast" id="toast"></div>
 
-<script>
-const WALLET  = '0x6236aDdD817F8f364b9Ea2D390341fBdFb35B15B';
-const AGENT   = '0x78848254D412f6907E7fa6707D5Ef8c2638d6687';
-const PRIV    = '0x4a1ba82e2124b34d79ce7f2bc48a156b4dba78150f579bd12482f1d733f12ba9';
+<script type="module">
+import { ethers } from 'https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.min.js';
+
+const WALLET = '0x6236aDdD817F8f364b9Ea2D390341fBdFb35B15B';
+const PRIV   = '0x4a1ba82e2124b34d79ce7f2bc48a156b4dba78150f579bd12482f1d733f12ba9';
 
 let currentPositions = [];
+const wallet = new ethers.Wallet(PRIV);
 
 function fmt(n) { return parseFloat(n||0).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 
@@ -85,9 +69,65 @@ async function q(body) {
   return r.json();
 }
 
-async function load() {
-  document.getElementById('total').className='total loading';
-  document.getElementById('total').textContent='…';
+async function signAction(action, nonce) {
+  // Hyperliquid signing: hash = keccak256(msgpack-like but they use this specific scheme)
+  const msgBytes = ethers.toUtf8Bytes(JSON.stringify(action));
+  const nonceBytes = new Uint8Array(8);
+  const view = new DataView(nonceBytes.buffer);
+  view.setBigUint64(0, BigInt(nonce), false);
+  const combined = new Uint8Array(msgBytes.length + 8);
+  combined.set(msgBytes, 0);
+  combined.set(nonceBytes, msgBytes.length);
+  const actionHash = ethers.keccak256(combined);
+
+  const domain = {
+    chainId: 1337,
+    name: 'Exchange',
+    verifyingContract: '0x0000000000000000000000000000000000000000',
+    version: '1'
+  };
+  const types = {
+    Agent: [
+      { name: 'source', type: 'string' },
+      { name: 'connectionId', type: 'bytes32' }
+    ]
+  };
+  const value = { source: 'a', connectionId: actionHash };
+  return wallet.signTypedData(domain, types, value);
+}
+
+window.closeAll = async function() {
+  const btn = document.getElementById('close-btn');
+  btn.disabled = true;
+  btn.textContent = 'Wird geschlossen…';
+  try {
+    const nonce = Date.now();
+    const action = { type: 'closeAllPositions', dex: 'xyz' };
+    const sig = await signAction(action, nonce);
+
+    const res = await fetch('https://api.hyperliquid.xyz/exchange', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, nonce, signature: sig })
+    });
+    const text = await res.text();
+    console.log('raw response:', text);
+    let data;
+    try { data = JSON.parse(text); } catch { toast('Server: ' + text.slice(0,80)); return; }
+
+    if (data?.status === 'ok') toast('Positionen geschlossen ✓');
+    else toast('Antwort: ' + JSON.stringify(data).slice(0,80));
+    setTimeout(load, 2000);
+  } catch(e) {
+    toast('Fehler: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = 'Alle Positionen schließen (Market)';
+  }
+}
+
+window.load = async function() {
+  document.getElementById('total').className = 'total loading';
+  document.getElementById('total').textContent = '…';
   try {
     const [spotData, xyzData] = await Promise.all([
       q({type:'spotClearinghouseState', user:WALLET}),
@@ -100,7 +140,7 @@ async function load() {
       pnl += parseFloat(p?.position?.unrealizedPnl||0);
       if (p?.position?.coin) coins.push(p.position.coin.replace('xyz:',''));
     }
-    document.getElementById('total').className='total';
+    document.getElementById('total').className = 'total';
     document.getElementById('total').innerHTML = fmt(usdc.total)+'<span class="currency">$</span>';
     const pnlEl = document.getElementById('pnl');
     pnlEl.textContent = pnl===0?'—':(pnl>=0?'+':'')+fmt(pnl)+' $';
@@ -121,67 +161,25 @@ async function load() {
   }
 }
 
-async function closeAll() {
-  const btn = document.getElementById('close-btn');
-  btn.disabled = true;
-  btn.textContent = 'Wird geschlossen…';
-  try {
-    const {ethers} = await import('https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.min.js');
-    const wallet = new ethers.Wallet(PRIV);
-    const nonce = Date.now();
-
-    const action = {
-      type: 'closeAllPositions',
-      dex: 'xyz'
-    };
-
-    const actionHash = ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify(action) + nonce));
-    const sig = await wallet.signTypedData(
-      {chainId:1337, name:'Exchange', verifyingContract:'0x0000000000000000000000000000000000000000', version:'1'},
-      {Agent:[{name:'source',type:'string'},{name:'connectionId',type:'bytes32'}]},
-      {source:'a', connectionId:actionHash}
-    );
-
-    const res = await fetch('https://api.hyperliquid.xyz/exchange', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({action, nonce, signature:sig})
-    });
-    const data = await res.json();
-    console.log('closeAll result', JSON.stringify(data));
-
-    if (data?.status === 'ok' || data?.response?.type === 'order') {
-      toast('Positionen geschlossen ✓');
-    } else {
-      toast('Antwort: '+JSON.stringify(data).slice(0,80));
-    }
-    setTimeout(load, 2000);
-  } catch(e) {
-    toast('Fehler: '+e.message);
-    btn.disabled = false;
-    btn.textContent = 'Alle Positionen schließen (Market)';
-  }
-}
-
-function toast(msg) {
+window.toast = function(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'), 4000);
+  setTimeout(()=>t.classList.remove('show'), 5000);
 }
 
-function generateIcon() {
-  const c = document.createElement('canvas'); c.width=c.height=192;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle='#0a0a0a'; ctx.beginPath(); ctx.roundRect(0,0,192,192,32); ctx.fill();
-  ctx.fillStyle='#4ade80'; ctx.font='bold 130px -apple-system,sans-serif';
-  ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('H',96,100);
-  const url = c.toDataURL();
-  ['apple-touch-icon','icon'].forEach(rel=>{
-    let l=document.querySelector(`link[rel='${rel}']`);
-    if(!l){l=document.createElement('link');l.rel=rel;document.head.appendChild(l);}
-    l.href=url;
-  });
-}
-generateIcon();
+// Icon
+const c = document.createElement('canvas'); c.width=c.height=192;
+const ctx = c.getContext('2d');
+ctx.fillStyle='#0a0a0a'; ctx.beginPath(); ctx.roundRect(0,0,192,192,32); ctx.fill();
+ctx.fillStyle='#4ade80'; ctx.font='bold 130px -apple-system,sans-serif';
+ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('H',96,100);
+const url = c.toDataURL();
+['apple-touch-icon','icon'].forEach(rel=>{
+  let l=document.querySelector(`link[rel='${rel}']`);
+  if(!l){l=document.createElement('link');l.rel=rel;document.head.appendChild(l);}
+  l.href=url;
+});
+
 load();
 setInterval(load, 30000);
 </script>
