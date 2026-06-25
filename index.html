@@ -43,8 +43,6 @@
   .rating.neg { color:#b91c1c; }
   .rating.zero { color:#9ca3af; }
 
-  .no-position { font-size:16px; color:#b0bcd8; text-align:center; margin-top:1rem; }
-
   .btn-row { display:flex; gap:10px; margin-top:3rem; align-items:center; }
   .balance-btn, .ref-btn, .hl-btn {
     background:rgba(255,255,255,0.6); border:1.5px solid rgba(180,180,220,0.4);
@@ -54,11 +52,11 @@
     display:inline-block;
   }
   .ref-btn { font-size:16px; padding:8px 13px; letter-spacing:0; }
-  .hl-btn { font-size:16px; padding:8px 13px; letter-spacing:0; }
+  .hl-btn  { font-size:16px; padding:8px 13px; letter-spacing:0; }
   .balance-btn:active, .ref-btn:active, .hl-btn:active { background:rgba(255,255,255,0.9); }
 
   .balance-display { margin-top:0.8rem; font-size:15px; color:#6b7280; font-weight:600; min-height:22px; }
-  .ref-display { margin-top:0.3rem; font-size:11px; color:#b0b8d0; }
+  .vola-display { margin-top:0.3rem; font-size:11px; color:#b0b8d0; }
 
   .modal-bg {
     position:fixed; inset:0; background:rgba(100,100,150,0.25);
@@ -71,14 +69,16 @@
   }
   .modal h3 { font-size:18px; font-weight:700; color:#1a1a2e; }
   .modal p { font-size:13px; color:#9ca3af; line-height:1.5; }
+  .input-row { display:flex; align-items:center; gap:10px; }
   .modal input {
-    width:100%; background:#f3f4f6; border:1.5px solid #e5e7eb; color:#1a1a2e;
-    font-size:24px; font-weight:700; padding:12px 16px; border-radius:14px;
-    outline:none; text-align:center;
+    flex:1; background:#f3f4f6; border:1.5px solid #e5e7eb; color:#1a1a2e;
+    font-size:32px; font-weight:700; padding:12px 16px; border-radius:14px;
+    outline:none; text-align:center; width:100%;
   }
   .modal input:focus { border-color:#a5b4fc; }
+  .pct-label { font-size:24px; font-weight:700; color:#9ca3af; }
   .modal-btns { display:flex; gap:8px; }
-  .btn-save { flex:1; background:#6366f1; color:#fff; border:none; font-size:15px; font-weight:700; padding:12px; border-radius:12px; cursor:pointer; }
+  .btn-save  { flex:1; background:#6366f1; color:#fff; border:none; font-size:15px; font-weight:700; padding:12px; border-radius:12px; cursor:pointer; }
   .btn-reset { flex:1; background:#f3f4f6; color:#6b7280; border:none; font-size:15px; font-weight:600; padding:12px; border-radius:12px; cursor:pointer; }
   .btn-cancel { background:none; border:none; color:#d1d5db; font-size:13px; cursor:pointer; text-align:center; padding:4px; }
 
@@ -106,35 +106,38 @@
 
 <div class="btn-row">
   <button class="balance-btn" onclick="toggleBalance()">Kontostand</button>
-  <button class="ref-btn" onclick="openModal()" title="Einstellungen">⚙️</button>
+  <button class="ref-btn" onclick="openModal()" title="Vola anpassen">⚙️</button>
   <a class="hl-btn" href="https://app.hyperliquid.xyz" target="_blank" title="Hyperliquid öffnen">🔗</a>
 </div>
 <div class="balance-display" id="balance-display"></div>
-<div class="ref-display" id="ref-display"></div>
+<div class="vola-display" id="vola-display"></div>
 <div class="updated" id="updated"></div>
 
 <!-- Modal -->
 <div class="modal-bg" id="modal-bg">
   <div class="modal">
-    <h3>Referenzbetrag</h3>
-    <p>Optional: gib deinen Einsatz manuell ein. Standard ist der aktuelle Kontostand.</p>
-    <input type="number" id="ref-input" placeholder="z.B. 1000" min="1" step="10">
+    <h3>Vola-Anpassung</h3>
+    <p>Wie viel % Bewegung entsprechen 30 Punkten? Standard: 4%</p>
+    <div class="input-row">
+      <input type="number" id="vola-input" placeholder="4" min="0.5" max="20" step="0.5">
+      <span class="pct-label">%</span>
+    </div>
     <div class="modal-btns">
-      <button class="btn-reset" onclick="resetRef()">Automatisch</button>
-      <button class="btn-save" onclick="saveRef()">Speichern</button>
+      <button class="btn-reset" onclick="resetVola()">Reset (4%)</button>
+      <button class="btn-save" onclick="saveVola()">Speichern</button>
     </div>
     <button class="btn-cancel" onclick="closeModal()">Abbrechen</button>
   </div>
 </div>
 
 <script>
-const WALLET = '0x6236addd817f8f364b9ea2d390341fbdfb35b15b';
-const MAX_PCT = 4;   // 4% Bewegung = 30 Punkte
+const WALLET  = '0x6236addd817f8f364b9ea2d390341fbdfb35b15b';
 const MAX_PTS = 30;
+const DEFAULT_VOLA = 4;
 
 let balanceVisible = false;
-let lastBalance = 0;
-let manualRef = parseFloat(localStorage.getItem('hl_ref') || '0') || 0;
+let lastBalance    = 0;
+let maxPct = parseFloat(localStorage.getItem('hl_vola') || DEFAULT_VOLA);
 
 const RATINGS_POS = [
   { min: 1,  text: '👍 Ok! Du bist im Plus.' },
@@ -164,11 +167,11 @@ function getRating(pts) {
   }
 }
 
-function updateRefDisplay() {
-  const el = document.getElementById('ref-display');
-  el.textContent = manualRef > 0
-    ? 'Referenz: ' + manualRef.toLocaleString('de-DE') + ' $ (manuell)'
-    : '';
+function updateVolaDisplay() {
+  const el = document.getElementById('vola-display');
+  el.textContent = maxPct !== DEFAULT_VOLA
+    ? 'Vola: ' + maxPct + '% = 30 Punkte'
+    : 'Vola: 4% = 30 Punkte (Standard)';
 }
 
 function updateUI(positions, balance, markPrices) {
@@ -183,61 +186,46 @@ function updateUI(positions, balance, markPrices) {
     document.getElementById('coin-info').textContent = '';
     document.getElementById('entry-info').textContent = '';
     document.getElementById('bar').style.width = '0%';
+    document.getElementById('updated').textContent =
+      'Stand: ' + new Date().toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
     return;
   }
 
-  // Erste Position (CL)
   const pos = positions[0].position;
-  const coin = pos.coin; // z.B. "xyz:CL"
+  const coin = pos.coin;
   const entryPx = parseFloat(pos.entryPx);
   const szi = parseFloat(pos.szi);
   const isShort = szi < 0;
-
-  // Aktuellen Preis aus markPrices
   const markPx = parseFloat(markPrices?.[coin] || entryPx);
 
-  // Prozentuale Veränderung vom Entry
-  // Short: Preis fällt = positiv für uns
   const pctChange = (markPx - entryPx) / entryPx * 100;
-  const pctForUs = isShort ? -pctChange : pctChange;
+  const pctForUs  = isShort ? -pctChange : pctChange;
+  const pts = Math.round(pctForUs / maxPct * MAX_PTS * 10) / 10;
 
-  // Punkte: 4% = 30 Punkte
-  const pts = Math.round(pctForUs / MAX_PCT * MAX_PTS * 10) / 10;
-
-  // Anzeige
   const ptsEl = document.getElementById('points');
   ptsEl.classList.remove('loading-pulse');
-  const ptsDisplay = pts > 0 ? '+' + pts.toFixed(1) : pts.toFixed(1);
-  ptsEl.textContent = Math.abs(pts) < 0.05 ? '0' : ptsDisplay;
+  ptsEl.textContent = Math.abs(pts) < 0.05 ? '0' : (pts > 0 ? '+' : '') + pts.toFixed(1);
   ptsEl.className = 'points ' + (pts > 0.05 ? 'pos' : pts < -0.05 ? 'neg' : 'zero');
 
-  // Balken
   const clamped = Math.max(-30, Math.min(30, pts));
-  const pct = Math.abs(clamped) / 30 * 50;
   const barEl = document.getElementById('bar');
-  barEl.style.width = pct + '%';
+  barEl.style.width = (Math.abs(clamped) / 30 * 50) + '%';
   barEl.className = 'bar-fill ' + (pts >= 0 ? 'pos' : 'neg');
 
-  // Bewertung
   const { text, cls } = getRating(pts);
-  const ratingEl = document.getElementById('rating');
-  ratingEl.textContent = text;
-  ratingEl.className = 'rating ' + cls;
+  document.getElementById('rating').textContent = text;
+  document.getElementById('rating').className = 'rating ' + cls;
 
-  // Coin Info
   const name = coin.replace('xyz:', '');
-  const dir = isShort ? 'Short' : 'Long';
-  document.getElementById('coin-info').textContent = name + ' · ' + dir;
+  document.getElementById('coin-info').textContent = name + ' · ' + (isShort ? 'Short' : 'Long');
   document.getElementById('entry-info').textContent =
     'Entry: ' + entryPx.toFixed(3) + ' · Jetzt: ' + markPx.toFixed(3) +
     ' (' + (pctChange >= 0 ? '+' : '') + pctChange.toFixed(2) + '%)';
 
-  // Kontostand
   if (balanceVisible) {
     document.getElementById('balance-display').textContent =
       balance.toLocaleString('de-DE', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' $';
   }
-
   document.getElementById('updated').textContent =
     'Stand: ' + new Date().toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
 }
@@ -245,34 +233,20 @@ function updateUI(positions, balance, markPrices) {
 async function load() {
   try {
     const [spotData, xyzData, midsData] = await Promise.all([
-      fetch('https://api.hyperliquid.xyz/info', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({type:'spotClearinghouseState', user:WALLET})
-      }).then(r=>r.json()),
-      fetch('https://api.hyperliquid.xyz/info', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({type:'clearinghouseState', user:WALLET, dex:'xyz'})
-      }).then(r=>r.json()),
-      fetch('https://api.hyperliquid.xyz/info', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({type:'allMids', dex:'xyz'})
-      }).then(r=>r.json())
+      fetch('https://api.hyperliquid.xyz/info', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({type:'spotClearinghouseState', user:WALLET})}).then(r=>r.json()),
+      fetch('https://api.hyperliquid.xyz/info', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({type:'clearinghouseState', user:WALLET, dex:'xyz'})}).then(r=>r.json()),
+      fetch('https://api.hyperliquid.xyz/info', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({type:'allMids', dex:'xyz'})}).then(r=>r.json())
     ]);
-
     const usdc = (spotData.balances||[]).find(b=>b.coin==='USDC')||{};
-    const balance = parseFloat(usdc.total||0);
-    const positions = xyzData.assetPositions||[];
-
-    updateUI(positions, balance, midsData);
+    updateUI(xyzData.assetPositions||[], parseFloat(usdc.total||0), midsData);
   } catch(e) {
     document.getElementById('rating').textContent = 'Fehler beim Laden';
-    console.error(e);
   }
 }
 
 function toggleBalance() {
   balanceVisible = !balanceVisible;
-  const el = document.getElementById('balance-display');
+  const el  = document.getElementById('balance-display');
   const btn = document.querySelector('.balance-btn');
   if (balanceVisible) {
     el.textContent = lastBalance.toLocaleString('de-DE', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' $';
@@ -285,21 +259,21 @@ function toggleBalance() {
 }
 
 function openModal() {
-  document.getElementById('ref-input').value = manualRef > 0 ? manualRef : '';
+  document.getElementById('vola-input').value = maxPct;
   document.getElementById('modal-bg').classList.add('show');
-  setTimeout(() => document.getElementById('ref-input').focus(), 100);
+  setTimeout(() => document.getElementById('vola-input').focus(), 100);
 }
 function closeModal() { document.getElementById('modal-bg').classList.remove('show'); }
-function saveRef() {
-  const val = parseFloat(document.getElementById('ref-input').value);
-  if (val > 0) { manualRef = val; localStorage.setItem('hl_ref', val); }
-  closeModal(); updateRefDisplay();
+function saveVola() {
+  const val = parseFloat(document.getElementById('vola-input').value);
+  if (val > 0) { maxPct = val; localStorage.setItem('hl_vola', val); }
+  closeModal(); updateVolaDisplay(); load();
 }
-function resetRef() {
-  manualRef = 0; localStorage.removeItem('hl_ref');
-  closeModal(); updateRefDisplay();
+function resetVola() {
+  maxPct = DEFAULT_VOLA; localStorage.removeItem('hl_vola');
+  closeModal(); updateVolaDisplay(); load();
 }
-document.getElementById('ref-input').addEventListener('keydown', e => { if(e.key==='Enter') saveRef(); });
+document.getElementById('vola-input').addEventListener('keydown', e => { if(e.key==='Enter') saveVola(); });
 document.getElementById('modal-bg').addEventListener('click', e => { if(e.target===e.currentTarget) closeModal(); });
 
 // Icon
@@ -311,7 +285,7 @@ cx.textAlign='center';cx.textBaseline='middle';cx.fillText('P',96,105);
 const u=cv.toDataURL();
 ['apple-touch-icon','icon'].forEach(r=>{let l=document.querySelector("link[rel='"+r+"']");if(!l){l=document.createElement('link');l.rel=r;document.head.appendChild(l);}l.href=u;});
 
-updateRefDisplay();
+updateVolaDisplay();
 load();
 setInterval(load, 30000);
 </script>
