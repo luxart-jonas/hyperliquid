@@ -14,12 +14,8 @@
     background: linear-gradient(160deg, #e8f0ff 0%, #f5e8ff 100%);
     min-height: 100vh;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 2rem;
-    color: #1a1a2e;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 2rem; color: #1a1a2e;
   }
   .bar-wrap { width:100%; max-width:340px; margin-bottom:2.5rem; }
   .bar-labels { display:flex; justify-content:space-between; font-size:12px; color:#aaa; margin-bottom:6px; font-weight:600; }
@@ -48,8 +44,7 @@
     background:rgba(255,255,255,0.6); border:1.5px solid rgba(180,180,220,0.4);
     color:#6b7280; font-size:13px; font-weight:600; letter-spacing:0.08em;
     text-transform:uppercase; padding:10px 16px; border-radius:99px; cursor:pointer;
-    backdrop-filter:blur(8px); transition:background 0.2s; text-decoration:none;
-    display:inline-block;
+    backdrop-filter:blur(8px); transition:background 0.2s; text-decoration:none; display:inline-block;
   }
   .ref-btn { font-size:16px; padding:8px 13px; letter-spacing:0; }
   .hl-btn  { font-size:16px; padding:8px 13px; letter-spacing:0; }
@@ -58,23 +53,20 @@
   .balance-display { margin-top:0.8rem; font-size:15px; color:#6b7280; font-weight:600; min-height:22px; }
   .vola-display { margin-top:0.3rem; font-size:11px; color:#b0b8d0; }
 
-  .modal-bg {
-    position:fixed; inset:0; background:rgba(100,100,150,0.25);
-    backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; z-index:100;
-  }
+  /* Modal */
+  .modal-bg { position:fixed; inset:0; background:rgba(100,100,150,0.25); backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; z-index:100; }
   .modal-bg.show { display:flex; }
-  .modal {
-    background:#fff; border-radius:24px; padding:2rem; width:90%; max-width:320px;
-    box-shadow:0 20px 60px rgba(100,100,200,0.15); display:flex; flex-direction:column; gap:1rem;
-  }
+  .modal { background:#fff; border-radius:24px; padding:2rem; width:90%; max-width:320px; box-shadow:0 20px 60px rgba(100,100,200,0.15); display:flex; flex-direction:column; gap:1rem; }
   .modal h3 { font-size:18px; font-weight:700; color:#1a1a2e; }
-  .modal p { font-size:13px; color:#9ca3af; line-height:1.5; }
+  .atr-box { background:#f0fdf4; border:1.5px solid #bbf7d0; border-radius:14px; padding:14px 16px; }
+  .atr-box .atr-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:#6ee7b7; margin-bottom:4px; }
+  .atr-box .atr-val { font-size:24px; font-weight:800; color:#059669; }
+  .atr-box .atr-sub { font-size:11px; color:#86efac; margin-top:2px; }
+  .use-atr-btn { background:#dcfce7; border:none; color:#059669; font-size:13px; font-weight:700; padding:8px 16px; border-radius:99px; cursor:pointer; align-self:flex-start; }
+  .divider { height:1px; background:#f3f4f6; }
+  .modal p { font-size:13px; color:#9ca3af; }
   .input-row { display:flex; align-items:center; gap:10px; }
-  .modal input {
-    flex:1; background:#f3f4f6; border:1.5px solid #e5e7eb; color:#1a1a2e;
-    font-size:32px; font-weight:700; padding:12px 16px; border-radius:14px;
-    outline:none; text-align:center; width:100%;
-  }
+  .modal input { flex:1; background:#f3f4f6; border:1.5px solid #e5e7eb; color:#1a1a2e; font-size:32px; font-weight:700; padding:12px 16px; border-radius:14px; outline:none; text-align:center; }
   .modal input:focus { border-color:#a5b4fc; }
   .pct-label { font-size:24px; font-weight:700; color:#9ca3af; }
   .modal-btns { display:flex; gap:8px; }
@@ -106,8 +98,8 @@
 
 <div class="btn-row">
   <button class="balance-btn" onclick="toggleBalance()">Kontostand</button>
-  <button class="ref-btn" onclick="openModal()" title="Vola anpassen">⚙️</button>
-  <a class="hl-btn" href="https://app.hyperliquid.xyz" target="_blank" title="Hyperliquid öffnen">🔗</a>
+  <button class="ref-btn" onclick="openModal()" title="Einstellungen">⚙️</button>
+  <a class="hl-btn" href="https://app.hyperliquid.xyz" target="_blank">🔗</a>
 </div>
 <div class="balance-display" id="balance-display"></div>
 <div class="vola-display" id="vola-display"></div>
@@ -117,13 +109,23 @@
 <div class="modal-bg" id="modal-bg">
   <div class="modal">
     <h3>Vola-Anpassung</h3>
-    <p>Wie viel % Bewegung entsprechen 30 Punkten? Standard: 4%</p>
+
+    <!-- ATR Box -->
+    <div class="atr-box" id="atr-box">
+      <div class="atr-label">ATR (10 Tage, Wilder)</div>
+      <div class="atr-val" id="atr-val">wird berechnet…</div>
+      <div class="atr-sub" id="atr-sub"></div>
+    </div>
+    <button class="use-atr-btn" onclick="useAtr()">✓ ATR übernehmen</button>
+
+    <div class="divider"></div>
+    <p>Oder manuell eingeben:</p>
     <div class="input-row">
       <input type="number" id="vola-input" placeholder="4" min="0.5" max="20" step="0.5">
       <span class="pct-label">%</span>
     </div>
     <div class="modal-btns">
-      <button class="btn-reset" onclick="resetVola()">Reset (4%)</button>
+      <button class="btn-reset" onclick="resetVola()">Reset (ATR)</button>
       <button class="btn-save" onclick="saveVola()">Speichern</button>
     </div>
     <button class="btn-cancel" onclick="closeModal()">Abbrechen</button>
@@ -131,51 +133,116 @@
 </div>
 
 <script>
-const WALLET  = '0x6236addd817f8f364b9ea2d390341fbdfb35b15b';
-const MAX_PTS = 30;
-const DEFAULT_VOLA = 4;
+const WALLET      = '0x6236addd817f8f364b9ea2d390341fbdfb35b15b';
+const MAX_PTS     = 30;
+const DEFAULT_PCT = 4;
+const ATR_PERIODS = 10;
 
 let balanceVisible = false;
 let lastBalance    = 0;
-let maxPct = parseFloat(localStorage.getItem('hl_vola') || DEFAULT_VOLA);
+let manualPct      = parseFloat(localStorage.getItem('hl_vola_manual') || '0') || 0;
+let cachedAtrPct   = 0;
 
+// --- Ratings ---
 const RATINGS_POS = [
-  { min: 1,  text: '👍 Ok! Du bist im Plus.' },
-  { min: 6,  text: '✨ Gut gemacht! Läuft.' },
-  { min: 11, text: '🔥 Stark! Das macht Spaß.' },
-  { min: 16, text: '💪 Sehr stark! Bleib dran.' },
-  { min: 21, text: '🚀 Ausgezeichnet! Top-Tag!' },
-  { min: 26, text: '🏆 Überragend! Absoluter Lauf!' },
+  { min:1,  text:'👍 Ok! Du bist im Plus.' },
+  { min:6,  text:'✨ Gut gemacht! Läuft.' },
+  { min:11, text:'🔥 Stark! Das macht Spaß.' },
+  { min:16, text:'💪 Sehr stark! Bleib dran.' },
+  { min:21, text:'🚀 Ausgezeichnet! Top-Tag!' },
+  { min:26, text:'🏆 Überragend! Absoluter Lauf!' },
 ];
 const RATINGS_NEG = [
-  { min: -5,  text: '😐 Leicht im Minus. Kein Stress.' },
-  { min: -10, text: '🤔 Aufpassen. Der Markt testet dich.' },
-  { min: -15, text: '⚠️ Das zwickt. Bleibt der Plan?' },
-  { min: -20, text: '😬 Starkes Minus. Kopf klar halten.' },
-  { min: -25, text: '🛑 Sehr tief. Wirklich noch drin bleiben?' },
-  { min: -999, text: '🆘 Stopp. Jetzt wäre Aussteigen mutig.' },
+  { min:-5,   text:'😐 Leicht im Minus. Kein Stress.' },
+  { min:-10,  text:'🤔 Aufpassen. Der Markt testet dich.' },
+  { min:-15,  text:'⚠️ Das zwickt. Bleibt der Plan?' },
+  { min:-20,  text:'😬 Starkes Minus. Kopf klar halten.' },
+  { min:-25,  text:'🛑 Sehr tief. Wirklich noch drin bleiben?' },
+  { min:-999, text:'🆘 Stopp. Jetzt wäre Aussteigen mutig.' },
 ];
 
 function getRating(pts) {
-  if (Math.abs(pts) < 0.5) return { text: '— Noch neutral.', cls: 'zero' };
+  if (Math.abs(pts) < 0.5) return { text:'— Noch neutral.', cls:'zero' };
   if (pts > 0) {
     const r = [...RATINGS_POS].reverse().find(r => pts >= r.min);
-    return { text: r ? r.text : RATINGS_POS[0].text, cls: 'pos' };
-  } else {
-    const r = RATINGS_NEG.find(r => pts >= r.min);
-    return { text: r ? r.text : RATINGS_NEG[RATINGS_NEG.length-1].text, cls: 'neg' };
+    return { text: r ? r.text : RATINGS_POS[0].text, cls:'pos' };
   }
+  const r = RATINGS_NEG.find(r => pts >= r.min);
+  return { text: r ? r.text : RATINGS_NEG[RATINGS_NEG.length-1].text, cls:'neg' };
+}
+
+// --- ATR (Wilder) ---
+async function getAtrPct() {
+  const today = new Date().toISOString().slice(0,10);
+  const cached = localStorage.getItem('hl_atr_cache');
+  if (cached) {
+    const { date, atr } = JSON.parse(cached);
+    if (date === today) return atr;
+  }
+
+  const now   = Date.now();
+  const start = now - (25 * 24 * 60 * 60 * 1000); // 25 Tage für Wilder-Warmup
+  const r = await fetch('https://api.hyperliquid.xyz/info', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ type:'candleSnapshot', req:{ coin:'xyz:CL', interval:'1d', startTime:start, endTime:now } })
+  });
+  const candles = await r.json();
+  if (!Array.isArray(candles) || candles.length < ATR_PERIODS + 2) return DEFAULT_PCT;
+
+  // Erste TR für Seed
+  let atr = null;
+  for (let i = 1; i < candles.length; i++) {
+    const h     = parseFloat(candles[i].h);
+    const l     = parseFloat(candles[i].l);
+    const cPrev = parseFloat(candles[i-1].c);
+    const tr    = Math.max(h - l, Math.abs(h - cPrev), Math.abs(l - cPrev));
+    const trPct = tr / cPrev * 100;
+
+    if (atr === null) {
+      // Seed: einfacher Durchschnitt der ersten ATR_PERIODS TRs
+      if (i === ATR_PERIODS) {
+        let sum = 0;
+        for (let j = 1; j <= ATR_PERIODS; j++) {
+          const hj = parseFloat(candles[j].h);
+          const lj = parseFloat(candles[j].l);
+          const cp = parseFloat(candles[j-1].c);
+          const trj = Math.max(hj-lj, Math.abs(hj-cp), Math.abs(lj-cp));
+          sum += trj / cp * 100;
+        }
+        atr = sum / ATR_PERIODS;
+      }
+    } else {
+      // Wilder Smoothing: ATR = (ATR_prev × (n-1) + TR) / n
+      atr = (atr * (ATR_PERIODS - 1) + trPct) / ATR_PERIODS;
+    }
+  }
+
+  const result = Math.round(atr * 10) / 10;
+  localStorage.setItem('hl_atr_cache', JSON.stringify({ date: today, atr: result }));
+  return result;
+}
+
+function getActivePct() {
+  if (manualPct > 0) return manualPct;
+  if (cachedAtrPct > 0) return cachedAtrPct;
+  return DEFAULT_PCT;
 }
 
 function updateVolaDisplay() {
   const el = document.getElementById('vola-display');
-  el.textContent = maxPct !== DEFAULT_VOLA
-    ? 'Vola: ' + maxPct + '% = 30 Punkte'
-    : 'Vola: 4% = 30 Punkte (Standard)';
+  if (manualPct > 0) {
+    el.textContent = 'Vola: ' + manualPct + '% = 30 Punkte (manuell)';
+  } else if (cachedAtrPct > 0) {
+    el.textContent = 'Vola: ' + cachedAtrPct + '% = 30 Punkte (ATR auto)';
+  } else {
+    el.textContent = 'Vola: ' + DEFAULT_PCT + '% = 30 Punkte (Standard)';
+  }
 }
 
+// --- UI Update ---
 function updateUI(positions, balance, markPrices) {
   lastBalance = balance;
+  const maxPct = getActivePct();
 
   if (!positions || positions.length === 0) {
     document.getElementById('points').className = 'points zero';
@@ -186,21 +253,20 @@ function updateUI(positions, balance, markPrices) {
     document.getElementById('coin-info').textContent = '';
     document.getElementById('entry-info').textContent = '';
     document.getElementById('bar').style.width = '0%';
-    document.getElementById('updated').textContent =
-      'Stand: ' + new Date().toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    document.getElementById('updated').textContent = 'Stand: ' + new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
     return;
   }
 
-  const pos = positions[0].position;
-  const coin = pos.coin;
+  const pos     = positions[0].position;
+  const coin    = pos.coin;
   const entryPx = parseFloat(pos.entryPx);
-  const szi = parseFloat(pos.szi);
+  const szi     = parseFloat(pos.szi);
   const isShort = szi < 0;
-  const markPx = parseFloat(markPrices?.[coin] || entryPx);
+  const markPx  = parseFloat(markPrices?.[coin] || entryPx);
 
   const pctChange = (markPx - entryPx) / entryPx * 100;
   const pctForUs  = isShort ? -pctChange : pctChange;
-  const pts = Math.round(pctForUs / maxPct * MAX_PTS * 10) / 10;
+  const pts       = Math.round(pctForUs / maxPct * MAX_PTS * 10) / 10;
 
   const ptsEl = document.getElementById('points');
   ptsEl.classList.remove('loading-pulse');
@@ -208,15 +274,15 @@ function updateUI(positions, balance, markPrices) {
   ptsEl.className = 'points ' + (pts > 0.05 ? 'pos' : pts < -0.05 ? 'neg' : 'zero');
 
   const clamped = Math.max(-30, Math.min(30, pts));
-  const barEl = document.getElementById('bar');
+  const barEl   = document.getElementById('bar');
   barEl.style.width = (Math.abs(clamped) / 30 * 50) + '%';
   barEl.className = 'bar-fill ' + (pts >= 0 ? 'pos' : 'neg');
 
   const { text, cls } = getRating(pts);
   document.getElementById('rating').textContent = text;
-  document.getElementById('rating').className = 'rating ' + cls;
+  document.getElementById('rating').className   = 'rating ' + cls;
 
-  const name = coin.replace('xyz:', '');
+  const name = coin.replace('xyz:','');
   document.getElementById('coin-info').textContent = name + ' · ' + (isShort ? 'Short' : 'Long');
   document.getElementById('entry-info').textContent =
     'Entry: ' + entryPx.toFixed(3) + ' · Jetzt: ' + markPx.toFixed(3) +
@@ -224,18 +290,19 @@ function updateUI(positions, balance, markPrices) {
 
   if (balanceVisible) {
     document.getElementById('balance-display').textContent =
-      balance.toLocaleString('de-DE', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' $';
+      balance.toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' $';
   }
   document.getElementById('updated').textContent =
-    'Stand: ' + new Date().toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    'Stand: ' + new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 }
 
+// --- Load ---
 async function load() {
   try {
     const [spotData, xyzData, midsData] = await Promise.all([
-      fetch('https://api.hyperliquid.xyz/info', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({type:'spotClearinghouseState', user:WALLET})}).then(r=>r.json()),
-      fetch('https://api.hyperliquid.xyz/info', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({type:'clearinghouseState', user:WALLET, dex:'xyz'})}).then(r=>r.json()),
-      fetch('https://api.hyperliquid.xyz/info', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({type:'allMids', dex:'xyz'})}).then(r=>r.json())
+      fetch('https://api.hyperliquid.xyz/info',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'spotClearinghouseState',user:WALLET})}).then(r=>r.json()),
+      fetch('https://api.hyperliquid.xyz/info',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'clearinghouseState',user:WALLET,dex:'xyz'})}).then(r=>r.json()),
+      fetch('https://api.hyperliquid.xyz/info',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'allMids',dex:'xyz'})}).then(r=>r.json())
     ]);
     const usdc = (spotData.balances||[]).find(b=>b.coin==='USDC')||{};
     updateUI(xyzData.assetPositions||[], parseFloat(usdc.total||0), midsData);
@@ -244,39 +311,65 @@ async function load() {
   }
 }
 
+// --- ATR Modal ---
+async function openModal() {
+  document.getElementById('vola-input').value = manualPct > 0 ? manualPct : '';
+  document.getElementById('atr-val').textContent = 'berechne…';
+  document.getElementById('atr-sub').textContent = '';
+  document.getElementById('modal-bg').classList.add('show');
+
+  try {
+    const atr = await getAtrPct();
+    cachedAtrPct = atr;
+    document.getElementById('atr-val').textContent = atr.toFixed(1) + '%';
+    const today = new Date().toISOString().slice(0,10);
+    document.getElementById('atr-sub').textContent = 'gespeichert für heute · ' + today;
+    updateVolaDisplay();
+  } catch(e) {
+    document.getElementById('atr-val').textContent = 'Fehler';
+    document.getElementById('atr-sub').textContent = e.message;
+  }
+}
+
+function closeModal() { document.getElementById('modal-bg').classList.remove('show'); }
+
+function useAtr() {
+  if (cachedAtrPct > 0) {
+    manualPct = 0;
+    localStorage.removeItem('hl_vola_manual');
+    closeModal(); updateVolaDisplay(); load();
+  }
+}
+
+function saveVola() {
+  const val = parseFloat(document.getElementById('vola-input').value);
+  if (val > 0) { manualPct = val; localStorage.setItem('hl_vola_manual', val); }
+  closeModal(); updateVolaDisplay(); load();
+}
+
+function resetVola() {
+  manualPct = 0; localStorage.removeItem('hl_vola_manual');
+  closeModal(); updateVolaDisplay(); load();
+}
+
+document.getElementById('vola-input').addEventListener('keydown', e => { if(e.key==='Enter') saveVola(); });
+document.getElementById('modal-bg').addEventListener('click', e => { if(e.target===e.currentTarget) closeModal(); });
+
+// --- Balance ---
 function toggleBalance() {
   balanceVisible = !balanceVisible;
   const el  = document.getElementById('balance-display');
   const btn = document.querySelector('.balance-btn');
   if (balanceVisible) {
-    el.textContent = lastBalance.toLocaleString('de-DE', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' $';
+    el.textContent = lastBalance.toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' $';
     btn.textContent = 'Verbergen';
     setTimeout(() => { balanceVisible=false; el.textContent=''; btn.textContent='Kontostand'; }, 5000);
   } else {
-    el.textContent = '';
-    btn.textContent = 'Kontostand';
+    el.textContent = ''; btn.textContent = 'Kontostand';
   }
 }
 
-function openModal() {
-  document.getElementById('vola-input').value = maxPct;
-  document.getElementById('modal-bg').classList.add('show');
-  setTimeout(() => document.getElementById('vola-input').focus(), 100);
-}
-function closeModal() { document.getElementById('modal-bg').classList.remove('show'); }
-function saveVola() {
-  const val = parseFloat(document.getElementById('vola-input').value);
-  if (val > 0) { maxPct = val; localStorage.setItem('hl_vola', val); }
-  closeModal(); updateVolaDisplay(); load();
-}
-function resetVola() {
-  maxPct = DEFAULT_VOLA; localStorage.removeItem('hl_vola');
-  closeModal(); updateVolaDisplay(); load();
-}
-document.getElementById('vola-input').addEventListener('keydown', e => { if(e.key==='Enter') saveVola(); });
-document.getElementById('modal-bg').addEventListener('click', e => { if(e.target===e.currentTarget) closeModal(); });
-
-// Icon
+// --- Icon ---
 const cv=document.createElement('canvas');cv.width=cv.height=192;
 const cx=cv.getContext('2d');
 cx.fillStyle='#e8f0ff';cx.fillRect(0,0,192,192);
@@ -285,6 +378,9 @@ cx.textAlign='center';cx.textBaseline='middle';cx.fillText('P',96,105);
 const u=cv.toDataURL();
 ['apple-touch-icon','icon'].forEach(r=>{let l=document.querySelector("link[rel='"+r+"']");if(!l){l=document.createElement('link');l.rel=r;document.head.appendChild(l);}l.href=u;});
 
+// --- Init ---
+// ATR beim Start im Hintergrund laden
+getAtrPct().then(atr => { cachedAtrPct = atr; updateVolaDisplay(); }).catch(()=>{});
 updateVolaDisplay();
 load();
 setInterval(load, 30000);
