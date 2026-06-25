@@ -21,119 +21,65 @@
     padding: 2rem;
     color: #1a1a2e;
   }
+  .bar-wrap { width:100%; max-width:340px; margin-bottom:2.5rem; }
+  .bar-labels { display:flex; justify-content:space-between; font-size:12px; color:#aaa; margin-bottom:6px; font-weight:600; }
+  .bar-track { height:18px; background:#dde4f5; border-radius:99px; position:relative; overflow:hidden; }
+  .bar-fill { position:absolute; top:0; bottom:0; left:50%; width:0; border-radius:99px; transition:width 0.6s cubic-bezier(.4,0,.2,1), background 0.4s; }
+  .bar-fill.pos { background:linear-gradient(90deg,#6ee7b7,#34d399); }
+  .bar-fill.neg { left:auto; right:50%; background:linear-gradient(90deg,#fca5a5,#f87171); }
+  .bar-center { position:absolute; top:0; bottom:0; left:50%; width:2px; background:#fff; transform:translateX(-50%); }
 
-  /* Balken */
-  .bar-wrap {
-    width: 100%;
-    max-width: 340px;
-    margin-bottom: 2.5rem;
-  }
-  .bar-labels {
-    display: flex;
-    justify-content: space-between;
-    font-size: 12px;
-    color: #888;
-    margin-bottom: 6px;
-    font-weight: 600;
-    letter-spacing: 0.05em;
-  }
-  .bar-track {
-    height: 18px;
-    background: #dde4f5;
-    border-radius: 99px;
-    position: relative;
-    overflow: hidden;
-  }
-  .bar-fill {
-    position: absolute;
-    top: 0; bottom: 0;
-    left: 50%;
-    width: 0;
-    border-radius: 99px;
-    transition: width 0.6s cubic-bezier(.4,0,.2,1), background 0.4s;
-  }
-  .bar-fill.pos { transform-origin: left; background: linear-gradient(90deg, #6ee7b7, #34d399); }
-  .bar-fill.neg { transform-origin: right; left: auto; right: 50%; background: linear-gradient(90deg, #fca5a5, #f87171); }
-  .bar-center {
-    position: absolute;
-    top: 0; bottom: 0;
-    left: 50%;
-    width: 2px;
-    background: #fff;
-    transform: translateX(-50%);
-  }
+  .points-label { font-size:13px; font-weight:700; letter-spacing:0.15em; text-transform:uppercase; color:#9ca3af; margin-bottom:8px; }
+  .points { font-size:96px; font-weight:800; line-height:1; letter-spacing:-4px; transition:color 0.4s; }
+  .points.pos { color:#059669; }
+  .points.neg { color:#dc2626; }
+  .points.zero { color:#9ca3af; }
 
-  /* Punkte */
-  .points-label {
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    color: #9ca3af;
-    margin-bottom: 8px;
-  }
-  .points {
-    font-size: 96px;
-    font-weight: 800;
-    line-height: 1;
-    letter-spacing: -4px;
-    transition: color 0.4s;
-  }
-  .points.pos { color: #059669; }
-  .points.neg { color: #dc2626; }
-  .points.zero { color: #9ca3af; }
+  .rating { margin-top:1.2rem; font-size:22px; font-weight:700; text-align:center; line-height:1.4; min-height:60px; transition:color 0.4s; }
+  .rating.pos { color:#047857; }
+  .rating.neg { color:#b91c1c; }
+  .rating.zero { color:#9ca3af; }
 
-  /* Bewertung */
-  .rating {
-    margin-top: 1.2rem;
-    font-size: 22px;
-    font-weight: 700;
-    text-align: center;
-    line-height: 1.4;
-    min-height: 60px;
-    transition: color 0.4s;
+  .btn-row { display:flex; gap:10px; margin-top:3rem; align-items:center; }
+  .balance-btn, .ref-btn {
+    background:rgba(255,255,255,0.6); border:1.5px solid rgba(180,180,220,0.4);
+    color:#6b7280; font-size:13px; font-weight:600; letter-spacing:0.08em;
+    text-transform:uppercase; padding:10px 20px; border-radius:99px; cursor:pointer;
+    backdrop-filter:blur(8px); transition:background 0.2s;
   }
-  .rating.pos { color: #047857; }
-  .rating.neg { color: #b91c1c; }
-  .rating.zero { color: #9ca3af; }
+  .ref-btn { font-size:18px; padding:8px 14px; letter-spacing:0; }
+  .balance-btn:active, .ref-btn:active { background:rgba(255,255,255,0.9); }
 
-  /* Kontostand Button */
-  .balance-btn {
-    margin-top: 3rem;
-    background: rgba(255,255,255,0.6);
-    border: 1.5px solid rgba(180,180,220,0.4);
-    color: #6b7280;
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    padding: 10px 24px;
-    border-radius: 99px;
-    cursor: pointer;
-    backdrop-filter: blur(8px);
-    transition: background 0.2s;
-  }
-  .balance-btn:active { background: rgba(255,255,255,0.9); }
+  .balance-display { margin-top:0.8rem; font-size:15px; color:#6b7280; font-weight:600; min-height:22px; }
+  .ref-display { margin-top:0.5rem; font-size:12px; color:#b0b8d0; }
 
-  .balance-display {
-    margin-top: 0.8rem;
-    font-size: 15px;
-    color: #6b7280;
-    font-weight: 600;
-    min-height: 22px;
-    transition: opacity 0.3s;
+  /* Modal */
+  .modal-bg {
+    position:fixed; inset:0; background:rgba(100,100,150,0.25);
+    backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; z-index:100;
   }
+  .modal-bg.show { display:flex; }
+  .modal {
+    background:#fff; border-radius:24px; padding:2rem; width:90%; max-width:320px;
+    box-shadow:0 20px 60px rgba(100,100,200,0.15); display:flex; flex-direction:column; gap:1rem;
+  }
+  .modal h3 { font-size:18px; font-weight:700; color:#1a1a2e; }
+  .modal p { font-size:13px; color:#9ca3af; line-height:1.5; }
+  .modal input {
+    width:100%; background:#f3f4f6; border:1.5px solid #e5e7eb; color:#1a1a2e;
+    font-size:24px; font-weight:700; padding:12px 16px; border-radius:14px;
+    outline:none; text-align:center;
+  }
+  .modal input:focus { border-color:#a5b4fc; }
+  .modal-btns { display:flex; gap:8px; }
+  .btn-save { flex:1; background:#6366f1; color:#fff; border:none; font-size:15px; font-weight:700; padding:12px; border-radius:12px; cursor:pointer; }
+  .btn-save:active { background:#4f46e5; }
+  .btn-reset { flex:1; background:#f3f4f6; color:#6b7280; border:none; font-size:15px; font-weight:600; padding:12px; border-radius:12px; cursor:pointer; }
+  .btn-reset:active { background:#e5e7eb; }
+  .btn-cancel { background:none; border:none; color:#d1d5db; font-size:13px; cursor:pointer; text-align:center; padding:4px; }
 
-  .updated {
-    margin-top: 2rem;
-    font-size: 11px;
-    color: #c4c9d8;
-    letter-spacing: 0.06em;
-  }
-
-  .loading-pulse {
-    animation: pulse 1.2s ease-in-out infinite;
-  }
+  .updated { margin-top:2rem; font-size:11px; color:#c4c9d8; letter-spacing:0.06em; }
+  .loading-pulse { animation:pulse 1.2s ease-in-out infinite; }
   @keyframes pulse { 0%,100%{opacity:.3} 50%{opacity:.8} }
 </style>
 </head>
@@ -151,10 +97,27 @@
 <div class="points zero loading-pulse" id="points">·</div>
 <div class="rating zero" id="rating">wird geladen…</div>
 
-<button class="balance-btn" onclick="toggleBalance()">Kontostand anzeigen</button>
+<div class="btn-row">
+  <button class="balance-btn" onclick="toggleBalance()">Kontostand</button>
+  <button class="ref-btn" onclick="openModal()" title="Referenzbetrag ändern">⚙️</button>
+</div>
 <div class="balance-display" id="balance-display"></div>
-
+<div class="ref-display" id="ref-display"></div>
 <div class="updated" id="updated"></div>
+
+<!-- Modal -->
+<div class="modal-bg" id="modal-bg">
+  <div class="modal">
+    <h3>Referenzbetrag</h3>
+    <p>Gib deinen Einsatz ein. Standard: aktueller Kontostand wird automatisch verwendet.</p>
+    <input type="number" id="ref-input" placeholder="z.B. 1000" min="1" step="10">
+    <div class="modal-btns">
+      <button class="btn-reset" onclick="resetRef()">Automatisch</button>
+      <button class="btn-save" onclick="saveRef()">Speichern</button>
+    </div>
+    <button class="btn-cancel" onclick="closeModal()">Abbrechen</button>
+  </div>
+</div>
 
 <script>
 const WALLET = '0x6236addd817f8f364b9ea2d390341fbdfb35b15b';
@@ -162,6 +125,7 @@ const REFERENZ = 400;
 
 let balanceVisible = false;
 let lastBalance = 0;
+let manualRef = parseFloat(localStorage.getItem('hl_ref') || '0') || 0;
 
 const RATINGS_POS = [
   { min: 1,  text: '👍 Ok! Du bist im Plus.' },
@@ -177,7 +141,7 @@ const RATINGS_NEG = [
   { min: -15, text: '⚠️ Das zwickt. Bleibt der Plan?' },
   { min: -20, text: '😬 Starkes Minus. Kopf klar halten.' },
   { min: -25, text: '🛑 Sehr tief. Wirklich noch drin bleiben?' },
-  { min: -30, text: '🆘 Stopp. Jetzt wäre Aussteigen mutig.' },
+  { min: -999, text: '🆘 Stopp. Jetzt wäre Aussteigen mutig.' },
 ];
 
 function getRating(pts) {
@@ -186,42 +150,47 @@ function getRating(pts) {
     const r = [...RATINGS_POS].reverse().find(r => pts >= r.min);
     return { text: r ? r.text : RATINGS_POS[0].text, cls: 'pos' };
   } else {
-    const r = [...RATINGS_NEG].find(r => pts >= r.min);
+    const r = RATINGS_NEG.find(r => pts >= r.min);
     return { text: r ? r.text : RATINGS_NEG[RATINGS_NEG.length-1].text, cls: 'neg' };
   }
 }
 
+function updateRefDisplay() {
+  const el = document.getElementById('ref-display');
+  if (manualRef > 0) {
+    el.textContent = 'Referenz: ' + manualRef.toLocaleString('de-DE') + ' $ (manuell)';
+  } else {
+    el.textContent = '';
+  }
+}
+
 function updateUI(pnl, balance) {
-  // Punkte = pnl / (balance / REFERENZ)
-  const multiplier = balance > 0 ? balance / REFERENZ : 1;
+  const ref = manualRef > 0 ? manualRef : balance;
+  const multiplier = ref > 0 ? ref / REFERENZ : 1;
   const pts = Math.round(pnl / multiplier * 10) / 10;
   const ptsDisplay = pts > 0 ? '+' + pts.toFixed(1) : pts.toFixed(1);
+
   const ptsEl = document.getElementById('points');
-  const barEl = document.getElementById('bar');
-  const ratingEl = document.getElementById('rating');
-
   ptsEl.classList.remove('loading-pulse');
-  ptsEl.textContent = pts === 0 ? '0' : ptsDisplay;
-  ptsEl.className = 'points ' + (pts > 0 ? 'pos' : pts < 0 ? 'neg' : 'zero');
+  ptsEl.textContent = Math.abs(pts) < 0.05 ? '0' : ptsDisplay;
+  ptsEl.className = 'points ' + (pts > 0.05 ? 'pos' : pts < -0.05 ? 'neg' : 'zero');
 
-  // Balken
   const clamped = Math.max(-30, Math.min(30, pts));
-  const pct = Math.abs(clamped) / 30 * 50; // max 50% jeder Seite
+  const pct = Math.abs(clamped) / 30 * 50;
+  const barEl = document.getElementById('bar');
   barEl.style.width = pct + '%';
   barEl.className = 'bar-fill ' + (pts >= 0 ? 'pos' : 'neg');
 
-  // Bewertung
   const { text, cls } = getRating(pts);
+  const ratingEl = document.getElementById('rating');
   ratingEl.textContent = text;
   ratingEl.className = 'rating ' + cls;
 
-  // Kontostand (versteckt)
   lastBalance = balance;
   if (balanceVisible) {
     document.getElementById('balance-display').textContent =
       balance.toLocaleString('de-DE', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' $';
   }
-
   document.getElementById('updated').textContent =
     'Stand: ' + new Date().toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
 }
@@ -229,24 +198,13 @@ function updateUI(pnl, balance) {
 async function load() {
   try {
     const [spotData, xyzData] = await Promise.all([
-      fetch('https://api.hyperliquid.xyz/info', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({type:'spotClearinghouseState', user:WALLET})
-      }).then(r=>r.json()),
-      fetch('https://api.hyperliquid.xyz/info', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({type:'clearinghouseState', user:WALLET, dex:'xyz'})
-      }).then(r=>r.json())
+      fetch('https://api.hyperliquid.xyz/info', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({type:'spotClearinghouseState', user:WALLET})}).then(r=>r.json()),
+      fetch('https://api.hyperliquid.xyz/info', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({type:'clearinghouseState', user:WALLET, dex:'xyz'})}).then(r=>r.json())
     ]);
-
     const usdc = (spotData.balances||[]).find(b=>b.coin==='USDC')||{};
     const balance = parseFloat(usdc.total||0);
-
     let pnl = 0;
-    for (const p of (xyzData.assetPositions||[])) {
-      pnl += parseFloat(p?.position?.unrealizedPnl||0);
-    }
-
+    for (const p of (xyzData.assetPositions||[])) pnl += parseFloat(p?.position?.unrealizedPnl||0);
     updateUI(pnl, balance);
   } catch(e) {
     document.getElementById('rating').textContent = 'Fehler beim Laden';
@@ -259,18 +217,31 @@ function toggleBalance() {
   const btn = document.querySelector('.balance-btn');
   if (balanceVisible) {
     el.textContent = lastBalance.toLocaleString('de-DE', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' $';
-    btn.textContent = 'Kontostand verbergen';
-    // Nach 5 Sekunden automatisch ausblenden
-    setTimeout(() => {
-      balanceVisible = false;
-      el.textContent = '';
-      btn.textContent = 'Kontostand anzeigen';
-    }, 5000);
+    btn.textContent = 'Verbergen';
+    setTimeout(() => { balanceVisible=false; el.textContent=''; btn.textContent='Kontostand'; }, 5000);
   } else {
     el.textContent = '';
-    btn.textContent = 'Kontostand anzeigen';
+    btn.textContent = 'Kontostand';
   }
 }
+
+function openModal() {
+  document.getElementById('ref-input').value = manualRef > 0 ? manualRef : '';
+  document.getElementById('modal-bg').classList.add('show');
+  setTimeout(() => document.getElementById('ref-input').focus(), 100);
+}
+function closeModal() { document.getElementById('modal-bg').classList.remove('show'); }
+function saveRef() {
+  const val = parseFloat(document.getElementById('ref-input').value);
+  if (val > 0) { manualRef = val; localStorage.setItem('hl_ref', val); }
+  closeModal(); updateRefDisplay(); load();
+}
+function resetRef() {
+  manualRef = 0; localStorage.removeItem('hl_ref');
+  closeModal(); updateRefDisplay(); load();
+}
+document.getElementById('ref-input').addEventListener('keydown', e => { if(e.key==='Enter') saveRef(); });
+document.getElementById('modal-bg').addEventListener('click', e => { if(e.target===e.currentTarget) closeModal(); });
 
 // Icon
 const cv=document.createElement('canvas');cv.width=cv.height=192;
@@ -281,6 +252,7 @@ cx.textAlign='center';cx.textBaseline='middle';cx.fillText('P',96,105);
 const u=cv.toDataURL();
 ['apple-touch-icon','icon'].forEach(r=>{let l=document.querySelector("link[rel='"+r+"']");if(!l){l=document.createElement('link');l.rel=r;document.head.appendChild(l);}l.href=u;});
 
+updateRefDisplay();
 load();
 setInterval(load, 30000);
 </script>
